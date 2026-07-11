@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mini War ⚔️ — Fun Games</title>
+  <meta name="description" content="Hold the arena against endless waves of invaders — survive, score, and climb the leaderboard!" />
+  <link rel="stylesheet" href="miniwar.css?v=9" />
+</head>
+<body>
+  <div class="game-wrap">
+    <header class="game-header">
+      <a class="back-link" href="index.html">&larr; Fun Games</a>
+      <h1 class="game-title">Mini War <span aria-hidden="true">⚔️</span></h1>
+      <div class="scoreboard">
+        <div class="score-pill">Score <strong id="score">0</strong></div>
+        <div class="score-pill">Territory <strong id="wave">0</strong></div>
+        <div class="score-pill">Best <strong id="best">0</strong></div>
+      </div>
+    </header>
+
+    <div class="play-area">
+      <!-- Left column: how-to guide + visit counter -->
+      <div class="side-col">
+        <aside class="howto" aria-label="How to play and controls">
+          <h2 class="howto-title"><span aria-hidden="true">📖</span> How to Play</h2>
+
+          <div class="howto-sec">
+            <h3>🎯 Goal</h3>
+            <p>Grow your economy, raise an army, and march on the enemy outpost to capture territory — all while keeping your base alive.</p>
+          </div>
+
+          <div class="howto-sec">
+            <h3>🕹️ Move</h3>
+            <ul class="howto-list">
+              <li><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span> / <span class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></span> walk your commander · 📱 drag on the board for a joystick</li>
+              <li>⚔️ Stand at the enemy outpost (top) to lead the assault</li>
+              <li>🛠️ Stand at your base (bottom) to repair it</li>
+              <li>🪙 Walk over dropped coins to grab bonus cash</li>
+            </ul>
+          </div>
+
+          <div class="howto-sec">
+            <h3>⌨️ Build hotkeys</h3>
+            <ul class="howto-list">
+              <li><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd></span> units</li>
+              <li><span class="keys"><kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><kbd>F</kbd></span> economy buildings</li>
+              <li><kbd>T</kbd> tower · <kbd>G</kbd> sell goods</li>
+              <li><kbd>Space</kbd> start / resume</li>
+              <li>🖱️ Or just click / 📱 tap any shop button.</li>
+            </ul>
+          </div>
+
+          <div class="howto-sec">
+            <h3>💡 Tips</h3>
+            <ul class="howto-list">
+              <li>Build your economy first, then your army.</li>
+              <li>Sell goods when the market button glows <span class="hot-word">green</span>.</li>
+              <li>Capture outposts to grow — each one is tougher.</li>
+            </ul>
+          </div>
+        </aside>
+
+        <aside class="visits" id="visits" aria-label="Site visit counter">
+          <h2 class="visits-title"><span aria-hidden="true">👀</span> Visits</h2>
+          <p class="visits-count" id="visits-count">—</p>
+          <p class="visits-note">mini war visits</p>
+        </aside>
+
+        <aside class="build" aria-label="Economy buildings">
+          <h2 class="build-title"><span aria-hidden="true">🏭</span> Economy</h2>
+          <div class="build-row">
+            <button class="shop-btn" data-buy="farm" disabled>
+              <span class="shop-name">🌾 Farm <span class="count"></span></span>
+              <span class="shop-desc">more income</span>
+              <span class="cost">$50</span>
+            </button>
+            <button class="shop-btn" data-buy="workshop" disabled>
+              <span class="shop-name">🔧 Workshop <span class="count"></span></span>
+              <span class="shop-desc">income boost</span>
+              <span class="cost">$180</span>
+            </button>
+            <button class="shop-btn" data-buy="bank" disabled>
+              <span class="shop-name">🏦 Bank <span class="count"></span></span>
+              <span class="shop-desc">big income</span>
+              <span class="cost">$600</span>
+            </button>
+            <button class="shop-btn" data-buy="powerplant" disabled>
+              <span class="shop-name">⚡ Power <span class="count"></span></span>
+              <span class="shop-desc">×income</span>
+              <span class="cost">$2.2K</span>
+            </button>
+          </div>
+        </aside>
+
+        <aside class="build" aria-label="Research upgrades">
+          <h2 class="build-title"><span aria-hidden="true">🔬</span> Research</h2>
+          <div class="build-row">
+            <button class="shop-btn tech" data-buy="training" disabled>
+              <span class="shop-name">🔬 Army Training <span class="count"></span></span>
+              <span class="shop-desc">+15% troop dmg</span>
+              <span class="cost">$350</span>
+            </button>
+            <button class="shop-btn tech" data-buy="officer" disabled>
+              <span class="shop-name">🎖️ Officer <span class="count"></span></span>
+              <span class="shop-desc">+25% dmg · needs Training ×3</span>
+              <span class="cost">$2.5K</span>
+            </button>
+            <button class="shop-btn tech" data-buy="elite" disabled>
+              <span class="shop-name">⭐ Elite Corps <span class="count"></span></span>
+              <span class="shop-desc">unlock 🥷 Commando · needs Officer</span>
+              <span class="cost">$15K</span>
+            </button>
+            <button class="shop-btn tech" data-buy="workers" disabled>
+              <span class="shop-name">⚙️ Fast Workers <span class="count"></span></span>
+              <span class="shop-desc">+20% income</span>
+              <span class="cost">$500</span>
+            </button>
+            <button class="shop-btn tech" data-buy="massprod" disabled>
+              <span class="shop-name">🏭 Mass Prod. <span class="count"></span></span>
+              <span class="shop-desc">×1.5 income · needs Workers ×3</span>
+              <span class="cost">$6K</span>
+            </button>
+            <button class="shop-btn tech" data-buy="fortify" disabled>
+              <span class="shop-name">🛡️ Fortify <span class="count"></span></span>
+              <span class="shop-desc">+tower dmg & base HP</span>
+              <span class="cost">$450</span>
+            </button>
+            <button class="shop-btn tech" data-buy="reinforced" disabled>
+              <span class="shop-name">🏰 Reinforced <span class="count"></span></span>
+              <span class="shop-desc">+tower fire & range · needs Fortify ×2</span>
+              <span class="cost">$5K</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+
+      <div class="stage">
+        <canvas id="game" width="480" height="600" aria-label="Mini War game"></canvas>
+
+        <!-- Overlay shown at start and on game over -->
+        <div class="overlay" id="overlay">
+          <div class="overlay-card">
+            <h2 id="overlay-title">Mini War ⚔️</h2>
+            <p id="overlay-text">
+              Build your war economy, then raise an army! Spend cash on
+              <strong>Farms / Workshops / Banks</strong> to grow your income,
+              then buy <strong>Soldiers, Tanks &amp; Helis</strong> that march
+              on the enemy outpost. Smash it to capture territory — each new
+              region is tougher. Research deep tech chains to unlock the elite
+              <strong>Commando</strong>, and <strong>Sell Goods</strong> when the
+              market spikes. <strong>Walk your commander</strong> (WASD / arrows
+              or drag to use the joystick) up to the outpost to lead the assault,
+              back to base to repair, and over fallen <strong>coins</strong> to
+              grab them. Don't let your base fall!
+            </p>
+            <p id="overlay-score" class="overlay-score" hidden></p>
+            <p id="idle-note" class="idle-note" hidden></p>
+
+            <!-- Score submission, shown only on game over -->
+            <div id="submit-row" class="submit-row" hidden>
+              <input id="name-input" class="name-input" type="text" maxlength="16"
+                     placeholder="Your name" autocomplete="off" spellcheck="false" />
+              <button id="submit-btn" class="submit-btn">Submit score</button>
+              <p id="submit-status" class="submit-status" hidden></p>
+            </div>
+
+            <!-- Replace-your-own-score confirmation (returning player) -->
+            <div id="replace-confirm" class="replace-confirm" hidden>
+              <p id="replace-welcome" class="replace-welcome"></p>
+              <div class="replace-rows">
+                <p id="replace-prev" class="replace-line"></p>
+                <p id="replace-this" class="replace-line"></p>
+              </div>
+              <p id="replace-verdict" class="replace-verdict"></p>
+              <div class="replace-actions">
+                <button id="replace-yes" class="submit-btn">Replace my score</button>
+                <button id="replace-no" class="keep-btn">Keep my old score</button>
+              </div>
+            </div>
+
+            <button id="start-btn" class="play-btn">Start Game</button>
+            <p class="overlay-hint">Economy first, then crush the outpost!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: unit deploys + defense/market, beside the board for no-scroll play -->
+      <div class="side-col side-col-right">
+        <aside class="army" aria-label="Deploy units">
+          <h2 class="army-title"><span aria-hidden="true">🪖</span> Deploy Units</h2>
+          <div class="army-list">
+            <button class="shop-btn mil" data-buy="soldier" disabled>
+              <span class="shop-name">🪖 Soldier</span>
+              <span class="shop-desc">cheap & fast</span>
+              <span class="cost">$25</span>
+            </button>
+            <button class="shop-btn mil" data-buy="tank" disabled>
+              <span class="shop-name">🚜 Tank</span>
+              <span class="shop-desc">heavy armor</span>
+              <span class="cost">$130</span>
+            </button>
+            <button class="shop-btn mil" data-buy="heli" disabled>
+              <span class="shop-name">🚁 Heli</span>
+              <span class="shop-desc">fast striker</span>
+              <span class="cost">$320</span>
+            </button>
+            <button class="shop-btn mil" data-buy="artillery" disabled>
+              <span class="shop-name">💥 Artillery</span>
+              <span class="shop-desc">splash damage</span>
+              <span class="cost">$750</span>
+            </button>
+            <button class="shop-btn mil" data-buy="commando" disabled>
+              <span class="shop-name">🥷 Commando</span>
+              <span class="shop-desc">elite striker · needs Elite Corps</span>
+              <span class="cost">$1.1K</span>
+            </button>
+          </div>
+        </aside>
+
+        <aside class="build" aria-label="Defense and market">
+          <h2 class="build-title"><span aria-hidden="true">🛡️</span> Defense & Market</h2>
+          <div class="build-row">
+            <button class="shop-btn def" data-buy="tower" disabled>
+              <span class="shop-name">🗼 Tower <span class="count"></span></span>
+              <span class="shop-desc">auto-defense</span>
+              <span class="cost">$160</span>
+            </button>
+            <button class="shop-btn market" data-buy="collect" disabled>
+              <span class="shop-name">💰 Sell Goods</span>
+              <span class="shop-desc">cash in at market rate</span>
+              <span class="cost">COLLECT</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+
+      <!-- Global leaderboard, shared across everyone on the public link -->
+      <aside class="leaderboard" id="leaderboard" aria-label="Global leaderboard">
+        <h2 class="lb-title"><span aria-hidden="true">🏆</span> Top Soldiers</h2>
+        <div class="lb-head">
+          <span class="lb-col-rank">#</span>
+          <span class="lb-col-name">Name</span>
+          <span class="lb-col-wave">Land</span>
+          <span class="lb-col-score">Score</span>
+        </div>
+        <ol class="lb-list" id="lb-list"></ol>
+        <p class="lb-note" id="lb-note">Loading…</p>
+      </aside>
+    </div>
+
+    <section class="legend">
+      <div class="legend-item">
+        🚶 Move your commander:
+        <span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span> /
+        <span class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></span>&nbsp;arrows ·
+        📱 drag on the board to use the joystick
+      </div>
+      <div class="legend-item">⚔️ Lead the assault at the outpost · 🛠️ stand at your base to repair · 🪙 walk over coins to grab them</div>
+      <div class="legend-item">🖱️ Click / 📱 tap any button to build &amp; buy</div>
+      <div class="legend-item">
+        <span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd></span>&nbsp;units ·
+        <span class="keys"><kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><kbd>F</kbd></span>&nbsp;economy ·
+        <kbd>T</kbd>&nbsp;tower · <kbd>G</kbd>&nbsp;sell goods
+      </div>
+      <div class="legend-item"><kbd>Space</kbd>&nbsp;start / resume · 💾 auto-saves on this device</div>
+    </section>
+
+    <p class="domain">fungames.py.fun</p>
+  </div>
+
+  <script src="miniwar.js?v=11"></script>
+</body>
+</html>

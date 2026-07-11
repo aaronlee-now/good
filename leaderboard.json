@@ -1,0 +1,28 @@
+{
+  "scores": [
+    {
+      "name": "Aaron",
+      "apples": 13,
+      "timeMs": 80891,
+      "ts": 1782015762964
+    },
+    {
+      "name": "andrew",
+      "apples": 6,
+      "timeMs": 72335,
+      "ts": 1781999399357
+    },
+    {
+      "name": "conntest",
+      "apples": 2,
+      "timeMs": 5000,
+      "ts": 1782013993983
+    },
+    {
+      "name": "2",
+      "apples": 0,
+      "timeMs": 0,
+      "ts": 1782014315157
+    }
+  ]
+}

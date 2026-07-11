@@ -1,0 +1,10 @@
+# Secrets / deploy credentials
+_deploy_chess.sh
+_deploy_chess.log
+.env
+.env.*
+*.pem
+credentials.json
+
+# Local deploy artifacts
+fungames_deploy.zip

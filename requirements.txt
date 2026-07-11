@@ -1,0 +1,10 @@
+# Fun Games — Python dependencies.
+#
+# Only Flask is needed, and it is PREINSTALLED on PythonAnywhere's free tier,
+# so you usually don't have to install anything. This file documents the one
+# dependency and lets you reproduce the environment elsewhere with:
+#     pip install -r requirements.txt
+#
+# (The original server.py uses only the standard library — no dependencies.
+#  flask_app.py is the PythonAnywhere-friendly version and needs Flask.)
+Flask>=2.0,<4.0

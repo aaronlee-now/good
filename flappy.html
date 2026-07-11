@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Flappy Parrot 🦜 — Fun Games</title>
+  <meta name="description" content="Tap to keep the zoo parrot flying through the vines — how far can you go?" />
+  <link rel="stylesheet" href="flappy.css?v=1" />
+</head>
+<body>
+  <div class="game-wrap">
+    <header class="game-header">
+      <a class="back-link" href="index.html">&larr; Fun Games</a>
+      <h1 class="game-title">Flappy Parrot <span aria-hidden="true">🦜</span></h1>
+      <div class="scoreboard">
+        <div class="score-pill">Score <strong id="score">0</strong></div>
+        <div class="score-pill">Best <strong id="best">0</strong></div>
+      </div>
+    </header>
+
+    <div class="play-area">
+      <!-- Global visit counter, on the OPPOSITE side from the leaderboard -->
+      <aside class="visits" id="visits" aria-label="Site visit counter">
+        <h2 class="visits-title"><span aria-hidden="true">👀</span> Visits</h2>
+        <p class="visits-count" id="visits-count">—</p>
+        <p class="visits-note">flappy visits</p>
+      </aside>
+
+      <div class="stage">
+        <canvas id="game" width="400" height="600" aria-label="Flappy Parrot game"></canvas>
+
+        <!-- Overlay shown at start and on game over -->
+        <div class="overlay" id="overlay">
+          <div class="overlay-card">
+            <h2 id="overlay-title">Flappy Parrot 🦜</h2>
+            <p id="overlay-text">
+              Tap, click, or press <strong>Space</strong> to flap! Keep the parrot
+              flying through the gaps in the vines. Don't hit a vine, the ground,
+              or the sky.
+            </p>
+            <p id="overlay-score" class="overlay-score" hidden></p>
+
+            <!-- Score submission, shown only on game over -->
+            <div id="submit-row" class="submit-row" hidden>
+              <input id="name-input" class="name-input" type="text" maxlength="16"
+                     placeholder="Your name" autocomplete="off" spellcheck="false" />
+              <button id="submit-btn" class="submit-btn">Submit score</button>
+              <p id="submit-status" class="submit-status" hidden></p>
+            </div>
+
+            <!-- Replace-your-own-score confirmation, shown when a returning
+                 player (this device's remembered account) re-submits a name
+                 that is already on the board. "Better" = HIGHER score. -->
+            <div id="replace-confirm" class="replace-confirm" hidden>
+              <p id="replace-welcome" class="replace-welcome"></p>
+              <div class="replace-rows">
+                <p id="replace-prev" class="replace-line"></p>
+                <p id="replace-this" class="replace-line"></p>
+              </div>
+              <p id="replace-verdict" class="replace-verdict"></p>
+              <div class="replace-actions">
+                <button id="replace-yes" class="submit-btn">Replace my score</button>
+                <button id="replace-no" class="keep-btn">Keep my old score</button>
+              </div>
+            </div>
+
+            <button id="start-btn" class="play-btn">Start Game</button>
+            <p class="overlay-hint">Tap the board or press <kbd>Space</kbd></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global leaderboard, shared across everyone on the public link -->
+      <aside class="leaderboard" id="leaderboard" aria-label="Global leaderboard">
+        <h2 class="lb-title"><span aria-hidden="true">🏆</span> High Scores</h2>
+        <div class="lb-head">
+          <span class="lb-col-rank">#</span>
+          <span class="lb-col-name">Name</span>
+          <span class="lb-col-score">Score</span>
+        </div>
+        <ol class="lb-list" id="lb-list"></ol>
+        <p class="lb-note" id="lb-note">Loading…</p>
+      </aside>
+    </div>
+
+    <section class="legend">
+      <div class="legend-item"><span class="keys"><kbd>Space</kbd><kbd>↑</kbd><kbd>W</kbd></span> or tap to flap</div>
+      <div class="legend-item">Fly through the gaps to score</div>
+      <div class="legend-item">Higher score is better!</div>
+    </section>
+
+    <p class="domain">fungames.py.fun</p>
+  </div>
+
+  <script src="flappy.js?v=1"></script>
+</body>
+</html>

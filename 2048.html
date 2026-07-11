@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>2048 🔢 — Fun Games</title>
+  <meta name="description" content="Slide and merge matching tiles — reach 2048!" />
+  <link rel="stylesheet" href="2048.css?v=1" />
+</head>
+<body>
+  <div class="game-wrap">
+    <header class="game-header">
+      <a class="back-link" href="index.html">&larr; Fun Games</a>
+      <h1 class="game-title">2048 <span aria-hidden="true">🔢</span></h1>
+      <div class="scoreboard">
+        <div class="score-pill">Score <strong id="score">0</strong></div>
+        <div class="score-pill">Best <strong id="best">0</strong></div>
+      </div>
+    </header>
+
+    <div class="play-area">
+      <!-- Global visit counter, on the OPPOSITE side from the leaderboard -->
+      <aside class="visits" id="visits" aria-label="Site visit counter">
+        <h2 class="visits-title"><span aria-hidden="true">👀</span> Visits</h2>
+        <p class="visits-count" id="visits-count">—</p>
+        <p class="visits-note">2048 visits</p>
+      </aside>
+
+      <div class="stage">
+        <div class="board-toolbar">
+          <button id="new-btn" class="new-btn" type="button">New Game</button>
+        </div>
+
+        <div class="board" id="board" aria-label="2048 game board">
+          <!-- 16 empty cell backgrounds -->
+          <div class="grid-bg" aria-hidden="true">
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+            <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+          </div>
+          <!-- Moving tiles are added here by JS -->
+          <div class="tiles" id="tiles"></div>
+        </div>
+
+        <!-- Overlay shown at start, on win, and on game over -->
+        <div class="overlay" id="overlay">
+          <div class="overlay-card">
+            <h2 id="overlay-title">2048 🔢</h2>
+            <p id="overlay-text">
+              Slide the tiles with arrow keys, WASD, or a swipe. Matching numbers
+              merge into one bigger tile. Reach <strong>2048</strong> to win —
+              then keep going for a high score!
+            </p>
+            <p id="overlay-score" class="overlay-score" hidden></p>
+
+            <!-- Score submission, shown on game over (and optional win submit) -->
+            <div id="submit-row" class="submit-row" hidden>
+              <input id="name-input" class="name-input" type="text" maxlength="16"
+                     placeholder="Your name" autocomplete="off" spellcheck="false" />
+              <button id="submit-btn" class="submit-btn">Submit score</button>
+              <p id="submit-status" class="submit-status" hidden></p>
+            </div>
+
+            <!-- Replace-your-own-score confirmation, shown when a returning
+                 player (this device's remembered account) re-submits a name
+                 that is already on the board. "Better" = HIGHER score. -->
+            <div id="replace-confirm" class="replace-confirm" hidden>
+              <p id="replace-welcome" class="replace-welcome"></p>
+              <div class="replace-rows">
+                <p id="replace-prev" class="replace-line"></p>
+                <p id="replace-this" class="replace-line"></p>
+              </div>
+              <p id="replace-verdict" class="replace-verdict"></p>
+              <div class="replace-actions">
+                <button id="replace-yes" class="submit-btn">Replace my score</button>
+                <button id="replace-no" class="keep-btn">Keep my old score</button>
+              </div>
+            </div>
+
+            <div class="overlay-actions">
+              <button id="start-btn" class="play-btn">Start Game</button>
+              <button id="keep-going-btn" class="keep-btn" hidden>Keep Going</button>
+            </div>
+            <p class="overlay-hint">Use <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> or swipe</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global leaderboard, shared across everyone on the public link -->
+      <aside class="leaderboard" id="leaderboard" aria-label="Global leaderboard">
+        <h2 class="lb-title"><span aria-hidden="true">🏆</span> High Scores</h2>
+        <div class="lb-head">
+          <span class="lb-col-rank">#</span>
+          <span class="lb-col-name">Name</span>
+          <span class="lb-col-score">Score</span>
+        </div>
+        <ol class="lb-list" id="lb-list"></ol>
+        <p class="lb-note" id="lb-note">Loading…</p>
+      </aside>
+    </div>
+
+    <section class="legend">
+      <div class="legend-item"><span class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></span> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+      <div class="legend-item">Swipe on phones</div>
+      <div class="legend-item">Higher score is better!</div>
+    </section>
+
+    <p class="domain">fungames.py.fun</p>
+  </div>
+
+  <script src="2048.js?v=1"></script>
+</body>
+</html>

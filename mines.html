@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Minesweeper 💣 — Fun Games</title>
+  <meta name="description" content="Classic Minesweeper with a zoo twist — clear the field fast and top the board!" />
+  <link rel="stylesheet" href="mines.css?v=2" />
+</head>
+<body>
+  <div class="game-wrap">
+    <header class="game-header">
+      <a class="back-link" href="index.html">&larr; Fun Games</a>
+      <h1 class="game-title">Minesweeper <span aria-hidden="true">💣</span></h1>
+      <div class="scoreboard">
+        <div class="score-pill">Mines <strong id="mine-count">0</strong></div>
+        <div class="score-pill">Time <strong id="time-count">0:00</strong></div>
+      </div>
+    </header>
+
+    <!-- Controls: difficulty + new game + (touch-only) flag-mode toggle -->
+    <div class="controls">
+      <label class="ctrl-label" for="difficulty">Level</label>
+      <select id="difficulty" class="difficulty">
+        <option value="easy" selected>Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+      <button id="new-game-btn" class="ctrl-btn">New Game</button>
+      <!-- Touch-only: switch taps between reveal and flag (hidden on desktop) -->
+      <button id="flag-toggle" class="ctrl-btn flag-toggle" type="button" aria-pressed="false">🚩 Flag mode</button>
+    </div>
+
+    <div class="play-area">
+      <!-- Global visit counter, on the OPPOSITE side from the leaderboard -->
+      <aside class="visits" id="visits" aria-label="Site visit counter">
+        <h2 class="visits-title"><span aria-hidden="true">👀</span> Visits</h2>
+        <p class="visits-count" id="visits-count">—</p>
+        <p class="visits-note">minesweeper visits</p>
+      </aside>
+
+      <div class="stage" id="stage">
+        <!-- The grid is built by mines.js into this element -->
+        <div class="board-wrap" id="board-wrap">
+          <div id="board" class="board" aria-label="Minesweeper board"></div>
+        </div>
+
+        <!-- Status line: ready / playing / win / loss -->
+        <p id="status" class="status">Tap or click a cell to start.</p>
+
+        <!-- Win / game-over overlay -->
+        <div class="overlay hidden" id="overlay">
+          <div class="overlay-card">
+            <h2 id="overlay-title">Cleared! 🏆</h2>
+            <p id="overlay-text"></p>
+            <p id="overlay-score" class="overlay-score"></p>
+
+            <!-- Score submission (shown on WIN and LOSS — ranked by progress) -->
+            <div id="submit-row" class="submit-row">
+              <input id="name-input" class="name-input" type="text" maxlength="16"
+                     placeholder="Your name" autocomplete="off" spellcheck="false" />
+              <button id="submit-btn" class="submit-btn">Submit progress</button>
+              <p id="submit-status" class="submit-status" hidden></p>
+            </div>
+
+            <!-- Replace-your-own-score confirmation, shown when a returning
+                 player (this device's remembered account) re-submits a name
+                 already on the board. "Better" = MORE cells revealed, or
+                 (same cells) a FASTER (lower) time. -->
+            <div id="replace-confirm" class="replace-confirm" hidden>
+              <p id="replace-welcome" class="replace-welcome"></p>
+              <div class="replace-rows">
+                <p id="replace-prev" class="replace-line"></p>
+                <p id="replace-this" class="replace-line"></p>
+              </div>
+              <p id="replace-verdict" class="replace-verdict"></p>
+              <div class="replace-actions">
+                <button id="replace-yes" class="submit-btn">Replace my score</button>
+                <button id="replace-no" class="keep-btn">Keep my old score</button>
+              </div>
+            </div>
+
+            <button id="overlay-new-btn" class="play-btn">Play Again</button>
+          </div>
+        </div>
+      </div>
+
+    <!-- Global leaderboard: most cells revealed for the SELECTED difficulty -->
+    <aside class="leaderboard" id="leaderboard" aria-label="Global leaderboard">
+      <h2 class="lb-title"><span aria-hidden="true">🏆</span> Top Sweepers</h2>
+      <p class="lb-sub" id="lb-sub">Easy</p>
+      <div class="lb-head">
+        <span class="lb-col-rank">#</span>
+        <span class="lb-col-name">Name</span>
+        <span class="lb-col-cells">Revealed</span>
+        <span class="lb-col-time">Time</span>
+      </div>
+        <ol class="lb-list" id="lb-list"></ol>
+        <p class="lb-note" id="lb-note">Loading…</p>
+      </aside>
+    </div>
+
+    <section class="legend">
+      <div class="legend-item">Reveal a cell to start — the <strong>first tap is always safe</strong>.</div>
+      <div class="legend-item desktop-only">Left-click reveals · right-click flags 🚩</div>
+      <div class="legend-item touch-only">Tap reveals · long-press flags 🚩 · or use Flag mode</div>
+      <div class="legend-item">Reveal as many safe cells as you can — even a loss makes the board!</div>
+    </section>
+
+    <p class="domain">fungames.py.fun</p>
+  </div>
+
+  <script src="mines.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Chess ♟️ — Fun Games</title>
+  <meta name="description" content="Play chess against a bot — easy, medium, or hard. Win in the fewest moves to top the board!" />
+  <link rel="stylesheet" href="chess.css?v=2" />
+  <!-- Rules engine: chess.js handles legal moves, check, checkmate, castling,
+       en passant and promotion. We pair it with our own bot. Self-hosted
+       (chesslib.js) so there's no external CDN to fail; if it somehow doesn't
+       load, chess.js shows a friendly message instead of breaking. -->
+  <script src="chesslib.js?v=2"></script>
+</head>
+<body>
+  <div class="game-wrap">
+    <header class="game-header">
+      <a class="back-link" href="index.html">&larr; Fun Games</a>
+      <h1 class="game-title">Chess <span aria-hidden="true">♟️</span></h1>
+      <div class="scoreboard">
+        <div class="score-pill">Moves <strong id="move-count">0</strong></div>
+      </div>
+    </header>
+
+    <!-- Controls: difficulty + new game -->
+    <div class="controls">
+      <label class="ctrl-label" for="difficulty">Bot</label>
+      <select id="difficulty" class="difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+      <button id="new-game-btn" class="ctrl-btn">New Game</button>
+      <span id="thinking" class="thinking" hidden>Bot thinking…</span>
+    </div>
+
+    <div class="play-area">
+      <!-- Global visit counter, on the OPPOSITE side from the leaderboard -->
+      <aside class="visits" id="visits" aria-label="Site visit counter">
+        <h2 class="visits-title"><span aria-hidden="true">👀</span> Visits</h2>
+        <p class="visits-count" id="visits-count">—</p>
+        <p class="visits-note">chess visits</p>
+      </aside>
+
+      <div class="stage">
+        <!-- The board is built by chess.js into this element -->
+        <div id="board" class="board" aria-label="Chess board"></div>
+
+        <!-- Status line: whose turn, check, checkmate, etc. -->
+        <p id="status" class="status">Loading…</p>
+
+        <!-- Win overlay: shown only when the PLAYER checkmates the bot -->
+        <div class="overlay hidden" id="overlay">
+          <div class="overlay-card">
+            <h2 id="overlay-title">Checkmate! 🏆</h2>
+            <p id="overlay-text"></p>
+            <p id="overlay-score" class="overlay-score"></p>
+
+            <!-- Score submission (player wins only) -->
+            <div id="submit-row" class="submit-row">
+              <input id="name-input" class="name-input" type="text" maxlength="16"
+                     placeholder="Your name" autocomplete="off" spellcheck="false" />
+              <button id="submit-btn" class="submit-btn">Submit win</button>
+              <p id="submit-status" class="submit-status" hidden></p>
+            </div>
+
+            <!-- Replace-your-own-score confirmation, shown when a returning
+                 player (this device's remembered account) re-submits a name
+                 already on the board. "Better" = fewer moves. -->
+            <div id="replace-confirm" class="replace-confirm" hidden>
+              <p id="replace-welcome" class="replace-welcome"></p>
+              <div class="replace-rows">
+                <p id="replace-prev" class="replace-line"></p>
+                <p id="replace-this" class="replace-line"></p>
+              </div>
+              <p id="replace-verdict" class="replace-verdict"></p>
+              <div class="replace-actions">
+                <button id="replace-yes" class="submit-btn">Replace my score</button>
+                <button id="replace-no" class="keep-btn">Keep my old score</button>
+              </div>
+            </div>
+
+            <button id="overlay-new-btn" class="play-btn">Play Again</button>
+          </div>
+        </div>
+
+        <!-- Shown if the chess.js CDN fails to load -->
+        <div class="overlay" id="load-error" hidden>
+          <div class="overlay-card">
+            <h2>Couldn't load chess ♟️</h2>
+            <p>
+              The chess rules library didn't load (it comes from a CDN). Please
+              check your connection and refresh the page to try again.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global leaderboard: wins in the FEWEST moves -->
+      <aside class="leaderboard" id="leaderboard" aria-label="Global leaderboard">
+        <h2 class="lb-title"><span aria-hidden="true">🏆</span> Fewest-Move Wins</h2>
+        <div class="lb-head">
+          <span class="lb-col-rank">#</span>
+          <span class="lb-col-name">Name</span>
+          <span class="lb-col-moves">Moves</span>
+          <span class="lb-col-diff">Bot</span>
+        </div>
+        <ol class="lb-list" id="lb-list"></ol>
+        <p class="lb-note" id="lb-note">Loading…</p>
+      </aside>
+    </div>
+
+    <section class="legend">
+      <div class="legend-item">You play <strong>White</strong> ♙ · the bot plays <strong>Black</strong> ♟️</div>
+      <div class="legend-item">Click a piece, then click a highlighted square to move.</div>
+      <div class="legend-item">Win by checkmate to make the board!</div>
+    </section>
+
+    <p class="domain">fungames.py.fun</p>
+  </div>
+
+  <script src="chess.js"></script>
+</body>
+</html>
