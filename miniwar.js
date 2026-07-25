@@ -72,10 +72,10 @@
   // ---- Economy + unit definitions ----------------------------------------
   const BASE_INCOME = 4;               // cash/sec before any buildings
   const START_CASH = 130;
-  const MY_BASE_HP = 850;
+  const MY_BASE_HP = 10000;
   const FIELD_TOP = 64;                // enemy outpost line
   const FIELD_BOTTOM = H - 64;         // your base line
-  const MAX_UNITS_PER_SIDE = 90;       // perf guard
+  const MAX_UNITS_PER_SIDE = 90;       // perf guard (enemy only; player army is uncapped)
 
   const MAX_TOWERS = 6;
 
@@ -127,14 +127,15 @@
     tower: { base: 160, growth: 1.6, range: 135, dmg: 17, fire: 0.65, label: "🗼 Tower" },
   };
 
-  // Military units: fixed cost; spawn one that marches on the enemy outpost.
-  // Artillery has splash. Commando is an elite striker unlocked by Elite Corps.
+  // Military units cost $0 so you can spawn freely, with no field cap on your
+  // own army. Artillery has splash; Commando needs Elite Corps.
+  // Economy / research / towers still cost cash.
   const MIL = {
-    soldier:   { cost: 25,   hp: 60,  dmg: 9,  speed: 46, range: 26, atk: 0.55, bounty: 9,   label: "🪖 Soldier",   color: "#57c6ff", ecolor: "#ff8787" },
-    tank:      { cost: 130,  hp: 280, dmg: 30, speed: 26, range: 30, atk: 0.95, bounty: 34,  label: "🚜 Tank",      color: "#69db7c", ecolor: "#ffa94d" },
-    heli:      { cost: 320,  hp: 170, dmg: 22, speed: 64, range: 48, atk: 0.5,  bounty: 46,  label: "🚁 Heli",      color: "#ffd43b", ecolor: "#da77f2" },
-    artillery: { cost: 750,  hp: 240, dmg: 60, speed: 18, range: 78, atk: 1.5,  bounty: 90,  label: "💥 Artillery", color: "#ffa94d", ecolor: "#ff6b6b", splash: 42 },
-    commando:  { cost: 1100, hp: 320, dmg: 70, speed: 70, range: 40, atk: 0.6,  bounty: 120, label: "🥷 Commando",  color: "#b197fc", ecolor: "#ff6b9d", lock: (c) => c.elite < 1 },
+    soldier:   { cost: 0, hp: 60,  dmg: 9,  speed: 46, range: 26, atk: 0.55, bounty: 9,   label: "🪖 Soldier",   color: "#57c6ff", ecolor: "#ff8787" },
+    tank:      { cost: 0, hp: 280, dmg: 30, speed: 26, range: 30, atk: 0.95, bounty: 34,  label: "🚜 Tank",      color: "#69db7c", ecolor: "#ffa94d" },
+    heli:      { cost: 0, hp: 170, dmg: 22, speed: 64, range: 48, atk: 0.5,  bounty: 46,  label: "🚁 Heli",      color: "#ffd43b", ecolor: "#da77f2" },
+    artillery: { cost: 0, hp: 240, dmg: 60, speed: 18, range: 78, atk: 1.5,  bounty: 90,  label: "💥 Artillery", color: "#ffa94d", ecolor: "#ff6b6b", splash: 42 },
+    commando:  { cost: 0, hp: 320, dmg: 70, speed: 70, range: 40, atk: 0.6,  bounty: 120, label: "🥷 Commando",  color: "#b197fc", ecolor: "#ff6b9d", lock: (c) => c.elite < 1 },
   };
 
   // ---- Game state ---------------------------------------------------------
@@ -229,7 +230,8 @@
   }
 
   function enemyBaseMaxHp() {
-    return Math.round(280 + territory * 170);
+    // Enemy outpost is a fortress now.
+    return Math.round(6000 + territory * 3000);
   }
 
   function reset() {
@@ -286,7 +288,7 @@
       const d = MIL[key];
       if (d.lock && d.lock(counts)) return;
       if (cash < d.cost) return;
-      if (countSide("ally") >= MAX_UNITS_PER_SIDE) return;
+      // No field cap for the player's army — spawn truly unlimited troops.
       cash -= d.cost;
       spawnUnit("ally", key);
     }
@@ -311,8 +313,9 @@
 
   function spawnUnit(side, type) {
     const d = MIL[type];
-    const hpScale = side === "enemy" ? 1 + territory * 0.08 : 1;
-    const dmgScale = side === "enemy" ? 1 + territory * 0.06 : 1;
+    // Enemies are SUPER strong: huge HP and punch, and they grow with territory.
+    const hpScale = side === "enemy" ? 25 + territory * 1.5 : 1;
+    const dmgScale = side === "enemy" ? 15 + territory * 1.0 : 1;
     // Allies rally to wherever the commander is standing; enemies pour out
     // randomly along the outpost line.
     const spawnX = side === "ally" && player
