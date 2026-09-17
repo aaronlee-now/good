@@ -75,7 +75,7 @@
   const MY_BASE_HP = 10000;
   const FIELD_TOP = 64;                // enemy outpost line
   const FIELD_BOTTOM = H - 64;         // your base line
-  const MAX_UNITS_PER_SIDE = 90;       // perf guard (enemy only; player army is uncapped)
+  const MAX_UNITS_PER_SIDE = 90;       // perf guard for both sides
 
   const MAX_TOWERS = 6;
 
@@ -127,15 +127,13 @@
     tower: { base: 160, growth: 1.6, range: 135, dmg: 17, fire: 0.65, label: "🗼 Tower" },
   };
 
-  // Military units cost $0 so you can spawn freely, with no field cap on your
-  // own army. Artillery has splash; Commando needs Elite Corps.
-  // Economy / research / towers still cost cash.
+  // Military units: paid costs. Commando needs Elite Corps.
   const MIL = {
-    soldier:   { cost: 0, hp: 60,  dmg: 9,  speed: 46, range: 26, atk: 0.55, bounty: 9,   label: "🪖 Soldier",   color: "#57c6ff", ecolor: "#ff8787" },
-    tank:      { cost: 0, hp: 280, dmg: 30, speed: 26, range: 30, atk: 0.95, bounty: 34,  label: "🚜 Tank",      color: "#69db7c", ecolor: "#ffa94d" },
-    heli:      { cost: 0, hp: 170, dmg: 22, speed: 64, range: 48, atk: 0.5,  bounty: 46,  label: "🚁 Heli",      color: "#ffd43b", ecolor: "#da77f2" },
-    artillery: { cost: 0, hp: 240, dmg: 60, speed: 18, range: 78, atk: 1.5,  bounty: 90,  label: "💥 Artillery", color: "#ffa94d", ecolor: "#ff6b6b", splash: 42 },
-    commando:  { cost: 0, hp: 320, dmg: 70, speed: 70, range: 40, atk: 0.6,  bounty: 120, label: "🥷 Commando",  color: "#b197fc", ecolor: "#ff6b9d", lock: (c) => c.elite < 1 },
+    soldier:   { cost: 25,   hp: 60,  dmg: 9,  speed: 46, range: 26, atk: 0.55, bounty: 9,   label: "🪖 Soldier",   color: "#57c6ff", ecolor: "#ff8787" },
+    tank:      { cost: 130,  hp: 280, dmg: 30, speed: 26, range: 30, atk: 0.95, bounty: 34,  label: "🚜 Tank",      color: "#69db7c", ecolor: "#ffa94d" },
+    heli:      { cost: 320,  hp: 170, dmg: 22, speed: 64, range: 48, atk: 0.5,  bounty: 46,  label: "🚁 Heli",      color: "#ffd43b", ecolor: "#da77f2" },
+    artillery: { cost: 750,  hp: 240, dmg: 60, speed: 18, range: 78, atk: 1.5,  bounty: 90,  label: "💥 Artillery", color: "#ffa94d", ecolor: "#ff6b6b", splash: 42 },
+    commando:  { cost: 1100, hp: 320, dmg: 70,  speed: 70, range: 40, atk: 0.6,  bounty: 120, label: "🥷 Commando",     color: "#b197fc", ecolor: "#ff6b9d", lock: (c) => c.elite < 1 },
   };
 
   // ---- Game state ---------------------------------------------------------
@@ -288,7 +286,7 @@
       const d = MIL[key];
       if (d.lock && d.lock(counts)) return;
       if (cash < d.cost) return;
-      // No field cap for the player's army — spawn truly unlimited troops.
+      if (countSide("ally") >= MAX_UNITS_PER_SIDE) return;
       cash -= d.cost;
       spawnUnit("ally", key);
     }
@@ -311,11 +309,21 @@
     return n;
   }
 
+  // Soft land scaling for HP/damage — unit TYPE tiers do most of the
+  // "weak → strong" feel, so early soldiers stay weak (not 20× monsters).
+  //   HP  × (1 + land × 0.12)   → +12% HP per land
+  //   DMG × (1 + land × 0.08)   → +8% damage per land
+  // Spawn gap also shortens a little (see enemySpawnInterval).
+  function enemyLandScales() {
+    return {
+      hp: 1 + territory * 0.12,
+      dmg: 1 + territory * 0.08,
+    };
+  }
+
   function spawnUnit(side, type) {
     const d = MIL[type];
-    // Enemies are SUPER strong: huge HP and punch, and they grow with territory.
-    const hpScale = side === "enemy" ? 25 + territory * 1.5 : 1;
-    const dmgScale = side === "enemy" ? 15 + territory * 1.0 : 1;
+    const land = side === "enemy" ? enemyLandScales() : { hp: 1, dmg: 1 };
     // Allies rally to wherever the commander is standing; enemies pour out
     // randomly along the outpost line.
     const spawnX = side === "ally" && player
@@ -325,9 +333,9 @@
       side, type,
       x: spawnX,
       y: side === "ally" ? FIELD_BOTTOM - 6 : FIELD_TOP + 6,
-      hp: d.hp * hpScale,
-      max: d.hp * hpScale,
-      dmg: d.dmg * dmgScale,
+      hp: d.hp * land.hp,
+      max: d.hp * land.hp,
+      dmg: d.dmg * land.dmg,
       speed: d.speed * (0.92 + Math.random() * 0.16),
       range: d.range,
       atkInt: d.atk,
@@ -377,12 +385,14 @@
       } else if (MIL[key]) {
         const d = MIL[key];
         const locked = !!(d.lock && d.lock(counts));
+        const atCap = countSide("ally") >= MAX_UNITS_PER_SIDE;
         btn.classList.toggle("locked", locked);
         if (costEl) costEl.textContent = locked ? "🔒" : "$" + formatNum(d.cost);
-        btn.disabled = !running || gameOver || locked || cash < d.cost;
+        btn.disabled = !running || gameOver || locked || atCap || cash < d.cost;
       }
     }
   }
+
 
   // ---- Controls -----------------------------------------------------------
   function primaryAction() { if (!running) startGame(false); }
@@ -509,15 +519,29 @@
   }
 
   // ---- Enemy AI -----------------------------------------------------------
+  // Seconds between enemy spawns. Starts ~3.2s; each land shaves 0.07s
+  // (floor 1.5s) so waves get a bit denser over many captures — not a rush.
   function enemySpawnInterval() {
-    return Math.max(1.0, 3.4 - territory * 0.16);
+    return Math.max(1.5, 3.2 - territory * 0.07);
   }
 
+  // Pick enemy unit by territory: weakest early → strongest late.
+  // Tiers (lands captured):
+  //   0–2   soldier
+  //   3–5   soldier / tank
+  //   6–8   tank / heli
+  //   9–12  heli / artillery
+  //   13+   artillery / commando (more commandos as land climbs)
   function pickEnemyType() {
     const r = Math.random();
-    if (territory >= 4 && r < 0.22) return "heli";
-    if (territory >= 2 && r < 0.5) return "tank";
-    return "soldier";
+    const t = territory;
+    if (t <= 2) return "soldier";
+    if (t <= 5) return r < 0.55 ? "soldier" : "tank";
+    if (t <= 8) return r < 0.55 ? "tank" : "heli";
+    if (t <= 12) return r < 0.55 ? "heli" : "artillery";
+    // 13+: mix artillery + commandos; past 16 mostly commandos
+    if (t <= 16) return r < 0.4 ? "artillery" : "commando";
+    return r < 0.2 ? "artillery" : "commando";
   }
 
   // ---- Commander avatar: movement + on-field interactions ----------------
@@ -986,7 +1010,7 @@
     submitStatus.className = "submit-status";
     submitBtn.disabled = false;
     submitBtn.textContent = "Submit score";
-    nameInput.value = localStorage.getItem("zooSnakeName") || "";
+    prepareNameInput();
     submitRow.hidden = false;
     replaceConfirm.hidden = true;
     overlay.classList.remove("hidden");
@@ -1261,9 +1285,37 @@
     replaceYes.focus();
   }
 
+  // One shared player name for this device across all Fun Games (see device.js).
+  function getSavedPlayerName() {
+    return FunDevice.getName();
+  }
+
+  // Fill the name box. If this device already picked a name, lock the box so
+  // they can only update THAT score (not invent a second person).
+  function prepareNameInput() {
+    if (FunDevice.isLocked()) {
+      nameInput.value = FunDevice.getName();
+      nameInput.readOnly = true;
+    }
+  }
+
   async function handleSubmitClick() {
     if (scoreSubmitted) return;
-    const name = (nameInput.value || "").trim().slice(0, 16);
+
+    let name = (nameInput.value || "").trim().slice(0, 16);
+    if (FunDevice.isLocked()) {
+      const locked = FunDevice.getName();
+      if (normalizeName(name) !== normalizeName(locked)) {
+        nameInput.value = locked;
+        submitStatus.textContent = "This device is locked to \"" + locked + "\".";
+        submitStatus.className = "submit-status taken";
+        submitStatus.hidden = false;
+        return;
+      }
+      name = locked;
+    }
+    nameInput.value = name;
+
     if (!name) {
       submitStatus.textContent = "Please enter a name first.";
       submitStatus.className = "submit-status err";
@@ -1271,23 +1323,31 @@
       nameInput.focus();
       return;
     }
+
     submitBtn.disabled = true;
     submitBtn.textContent = "Checking…";
     submitStatus.hidden = true;
     await fetchLeaderboard();
-    if (!nameIsTaken(name)) {
-      localStorage.setItem("zooSnakeName", name);
-      submitScore(name);
-      return;
-    }
-    const ownName = normalizeName(localStorage.getItem("zooSnakeName"));
-    if (ownName && normalizeName(name) === ownName) {
+
+    const locked = getSavedPlayerName();
+    if (locked && normalizeName(name) === normalizeName(locked)) {
+      // Returning device player — replace only (never invent a second person).
       const prevEntry = bestEntryForName(name);
-      if (prevEntry) { showReplaceConfirm(name, prevEntry); return; }
-      localStorage.setItem("zooSnakeName", name);
+      if (prevEntry) {
+        showReplaceConfirm(name, prevEntry);
+        return;
+      }
+      FunDevice.lockName(name);
+      submitScore(name, true);
+      return;
+    }
+
+    if (!nameIsTaken(name)) {
+      FunDevice.lockName(name);
       submitScore(name);
       return;
     }
+
     showNameTaken();
   }
 
@@ -1308,7 +1368,7 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       scoreSubmitted = true;
-      localStorage.setItem("zooSnakeName", name);
+      FunDevice.lockName(name);
       highlight = { name, score };
       renderLeaderboard(Array.isArray(data.scores) ? data.scores : []);
       submitStatus.textContent = replace ? "Updated your score! 🏆" : "Saved to the global board! 🏆";
@@ -1330,7 +1390,7 @@
   });
   replaceYes.addEventListener("click", () => {
     if (scoreSubmitted) return;
-    const name = (nameInput.value || "").trim().slice(0, 16);
+    const name = getSavedPlayerName() || (nameInput.value || "").trim().slice(0, 16);
     if (!name) return;
     submitScore(name, true);
   });
@@ -1353,28 +1413,25 @@
     visitsCountEl.textContent = Math.max(0, Math.floor(n)).toLocaleString("en-US");
   }
 
+  // Count once per device (legacy miniwarCounted still honored).
   async function initVisits() {
-    const VISIT_KEY = "miniwarCounted";
-    const firstOnThisDevice = !localStorage.getItem(VISIT_KEY);
-    try {
-      const res = await fetch(firstOnThisDevice ? "/api/miniwar/visit" : "/api/miniwar/visits", {
-        method: firstOnThisDevice ? "POST" : "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      if (firstOnThisDevice) localStorage.setItem(VISIT_KEY, "1");
-      showVisits(Number(data.visits));
-    } catch (err) { showVisits(NaN); }
+    await FunDevice.visitOnce(
+      "miniwar",
+      "/api/miniwar/visit",
+      "/api/miniwar/visits",
+      showVisits,
+      ["miniwarCounted"]
+    );
   }
 
   async function refreshVisits() {
-    try {
-      const res = await fetch("/api/miniwar/visits", { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      showVisits(Number(data.visits));
-    } catch (err) { /* keep */ }
+    await FunDevice.visitOnce(
+      "miniwar",
+      "/api/miniwar/visit",
+      "/api/miniwar/visits",
+      showVisits,
+      ["miniwarCounted"]
+    );
   }
 
   // ---- Boot ---------------------------------------------------------------

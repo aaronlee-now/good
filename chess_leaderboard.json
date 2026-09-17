@@ -1,3 +1,10 @@
 {
-  "scores": []
+  "scores": [
+    {
+      "name": "Iris",
+      "moves": 32,
+      "difficulty": "easy",
+      "ts": 1783730266795
+    }
+  ]
 }

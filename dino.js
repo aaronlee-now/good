@@ -1,7 +1,7 @@
-/* Flappy Parrot — a one-tap flyer with a zoo theme, to match Zoo Snake.
-   Pure vanilla JS + HTML5 canvas. No dependencies, works as static files.
-   Tap / click / Space makes the parrot flap; gravity always pulls it down.
-   Fly through the gaps in the vines. Higher score is better. */
+/* Dino Run — classic Chrome-dino style runner for Fun Games.
+   Pure vanilla JS + HTML5 canvas. No dependencies.
+   Space / tap / click = jump. Hold Down / S = duck.
+   Score = distance survived. Higher is better. */
 
 (() => {
   "use strict";
@@ -10,15 +10,12 @@
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
 
-  // Logical drawing space (portrait), independent of the on-screen size.
-  const W = 400;
-  const H = 600;
-  const GROUND_H = 70;            // height of the grassy ground strip
-  const FLOOR = H - GROUND_H;     // y of the top of the ground
+  // Logical drawing space (landscape), independent of the on-screen size.
+  const W = 800;
+  const H = 300;
+  const GROUND_H = 48;
+  const FLOOR = H - GROUND_H;
 
-  // Keep the canvas crisp on high-DPI screens while we draw in a fixed
-  // 0..W by 0..H coordinate space. The stage CSS locks the 2:3 aspect ratio,
-  // so scaling by the width factor keeps circles round (uniform scale).
   function fitCanvas() {
     const dpr = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth || W;
@@ -39,18 +36,14 @@
   const overlayScore = document.getElementById("overlay-score");
   const startBtn = document.getElementById("start-btn");
 
-  // Leaderboard + score-submission DOM.
   const submitRow = document.getElementById("submit-row");
   const nameInput = document.getElementById("name-input");
   const submitBtn = document.getElementById("submit-btn");
   const submitStatus = document.getElementById("submit-status");
   const lbList = document.getElementById("lb-list");
   const lbNote = document.getElementById("lb-note");
-
-  // Global visit counter display.
   const visitsCountEl = document.getElementById("visits-count");
 
-  // Replace-your-own-score confirmation DOM (returning player on this device).
   const replaceConfirm = document.getElementById("replace-confirm");
   const replaceWelcome = document.getElementById("replace-welcome");
   const replacePrev = document.getElementById("replace-prev");
@@ -59,93 +52,110 @@
   const replaceYes = document.getElementById("replace-yes");
   const replaceNo = document.getElementById("replace-no");
 
-  // ---- Physics tuning (units are px and seconds) --------------------------
-  const GRAVITY = 1500;          // downward acceleration
-  const FLAP = -430;             // instant upward velocity from a flap
-  const MAX_FALL = 620;          // terminal downward speed
-  const PIPE_SPEED = 155;        // how fast vines scroll left
-  const PIPE_W = 64;             // vine column width
-  const PIPE_GAP = 175;          // vertical opening the parrot flies through
-  const PIPE_SPACING = 230;      // horizontal distance between vine pairs
-  const GAP_MARGIN = 60;         // keep gaps away from the very top/bottom
-  const BIRD_X = 112;            // parrot's fixed horizontal position
-  const BIRD_R = 16;             // parrot collision radius
+  // ---- Physics / tuning ---------------------------------------------------
+  const GRAVITY = 2600;
+  const JUMP_V = -620;
+  const DINO_X = 90;
+  const DINO_W = 44;
+  const DINO_H = 48;
+  const DINO_DUCK_H = 28;
+  const BASE_SPEED = 280;
+  const MAX_SPEED = 620;
+  const SPEED_GAIN = 0.018; // extra speed per score point
+  const SPAWN_MIN = 0.9;
+  const SPAWN_MAX = 1.7;
 
   // ---- Game state ---------------------------------------------------------
-  let birdY, birdV, birdAngle;
-  let pipes;                     // array of { x, gapY, passed }
-  let score, best;
+  let dinoY, dinoV, ducking, onGround;
+  let obstacles; // { x, w, h, kind: "cactus"|"rock"|"bird", y }
+  let score, best, distance;
+  let speed;
+  let spawnTimer;
   let running = false, gameOver = false;
-  let scoreSubmitted = false;    // guard so we don't submit the same run twice
-  let lastTime = 0;              // timestamp of the previous animation frame
+  let scoreSubmitted = false;
+  let lastTime = 0;
+  let legPhase = 0; // for run animation
 
-  best = Number(localStorage.getItem("flappyBest") || 0);
+  best = Number(localStorage.getItem("dinoBest") || 0);
   bestEl.textContent = best;
 
   function reset() {
-    birdY = H * 0.45;
-    birdV = 0;
-    birdAngle = 0;
-    pipes = [];
+    dinoY = FLOOR - DINO_H;
+    dinoV = 0;
+    ducking = false;
+    onGround = true;
+    obstacles = [];
     score = 0;
+    distance = 0;
+    speed = BASE_SPEED;
+    spawnTimer = 1.2;
     scoreEl.textContent = "0";
     gameOver = false;
-    // Seed the first vine pair off the right edge so there's a moment to react.
-    spawnPipe(W + 120);
+    legPhase = 0;
   }
 
-  function randomGapY() {
-    const min = GAP_MARGIN + PIPE_GAP / 2;
-    const max = FLOOR - GAP_MARGIN - PIPE_GAP / 2;
-    return min + Math.random() * (max - min);
-  }
-
-  function spawnPipe(x) {
-    pipes.push({ x, gapY: randomGapY(), passed: false });
+  function dinoHitbox() {
+    const h = ducking && onGround ? DINO_DUCK_H : DINO_H;
+    const y = ducking && onGround ? FLOOR - h : dinoY;
+    // Slightly smaller than the drawn sprite so hits feel fair.
+    return { x: DINO_X + 6, y: y + 4, w: DINO_W - 12, h: h - 8 };
   }
 
   // ---- Controls -----------------------------------------------------------
-  // A single "flap" impulse. Used by every input route (keyboard, click, tap).
-  function flap() {
+  function jump() {
     if (!running || gameOver) return;
-    birdV = FLAP;
+    if (onGround) {
+      dinoV = JUMP_V;
+      onGround = false;
+      ducking = false;
+    }
   }
 
-  // Keyboard: Space / ArrowUp / W flap. Space must NOT scroll the page.
+  function setDuck(on) {
+    if (!running || gameOver) return;
+    ducking = on;
+  }
+
   window.addEventListener("keydown", (e) => {
-    // When the player is typing their name, let the input have every key.
     if (document.activeElement === nameInput) return;
 
     if (e.key === " " || e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
       e.preventDefault();
-      // If a button (Start / Submit) is focused, let it handle the key itself.
       if (document.activeElement && document.activeElement.tagName === "BUTTON") {
-        if (running && !gameOver) flap();
+        if (running && !gameOver) jump();
         return;
       }
-      if (running && !gameOver) flap();
+      if (running && !gameOver) jump();
       else if (!running) startGame();
+    }
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+      e.preventDefault();
+      setDuck(true);
     }
   });
 
-  // Mouse: clicking the board flaps. The overlay covers the canvas when the
-  // game isn't running, so a click here only happens during play.
-  canvas.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    flap();
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+      setDuck(false);
+    }
   });
 
-  // Touch: tap anywhere on the board to flap. preventDefault removes the 300ms
-  // tap delay + ghost click and stops the tap from scrolling or zooming.
-  canvas.addEventListener("touchstart", (e) => {
+  canvas.addEventListener("mousedown", (e) => {
     e.preventDefault();
-    flap();
-  }, { passive: false });
+    jump();
+  });
+
+  canvas.addEventListener(
+    "touchstart",
+    (e) => {
+      e.preventDefault();
+      jump();
+    },
+    { passive: false }
+  );
 
   startBtn.addEventListener("click", startGame);
 
-  // Detect touch capability automatically (never ask the player). Tag <body>
-  // so any touch-only styling can apply; desktop stays untouched.
   const isTouch =
     "ontouchstart" in window ||
     navigator.maxTouchPoints > 0 ||
@@ -161,60 +171,92 @@
     running = true;
     gameOver = false;
     scoreSubmitted = false;
-    birdV = FLAP * 0.7; // a gentle starting hop so the parrot doesn't drop
     lastTime = performance.now();
+  }
+
+  // ---- Obstacles ----------------------------------------------------------
+  function spawnObstacle() {
+    const roll = Math.random();
+    let kind, w, h, y;
+    if (roll < 0.55) {
+      // Small or tall cactus
+      kind = "cactus";
+      const tall = Math.random() < 0.4;
+      w = tall ? 28 : 22;
+      h = tall ? 56 : 38;
+      y = FLOOR - h;
+    } else if (roll < 0.8) {
+      kind = "rock";
+      w = 34 + Math.floor(Math.random() * 16);
+      h = 22 + Math.floor(Math.random() * 10);
+      y = FLOOR - h;
+    } else {
+      // Flying bird — duck under it
+      kind = "bird";
+      w = 36;
+      h = 22;
+      y = FLOOR - DINO_H - 18 - Math.floor(Math.random() * 20);
+    }
+    obstacles.push({ x: W + 20, w, h, kind, y });
   }
 
   // ---- Update -------------------------------------------------------------
   function update(dt) {
-    // Gravity pulls the parrot down; flapping set a negative (upward) velocity.
-    birdV = Math.min(MAX_FALL, birdV + GRAVITY * dt);
-    birdY += birdV * dt;
+    // Score grows with distance run.
+    distance += speed * dt;
+    const nextScore = Math.floor(distance / 10);
+    if (nextScore !== score) {
+      score = nextScore;
+      scoreEl.textContent = String(score);
+    }
+    speed = Math.min(MAX_SPEED, BASE_SPEED + score * SPEED_GAIN * 100);
 
-    // Tilt the parrot: nose up while rising, nose down while falling.
-    const target = Math.max(-0.5, Math.min(1.2, birdV / 520));
-    birdAngle += (target - birdAngle) * Math.min(1, dt * 10);
-
-    // Scroll the vines left and score when the parrot clears a pair.
-    for (const p of pipes) {
-      p.x -= PIPE_SPEED * dt;
-      if (!p.passed && p.x + PIPE_W < BIRD_X) {
-        p.passed = true;
-        score++;
-        scoreEl.textContent = String(score);
+    // Jump physics
+    if (!onGround) {
+      dinoV += GRAVITY * dt;
+      dinoY += dinoV * dt;
+      if (dinoY >= FLOOR - DINO_H) {
+        dinoY = FLOOR - DINO_H;
+        dinoV = 0;
+        onGround = true;
       }
     }
-    // Drop vines that have fully scrolled off the left edge.
-    while (pipes.length && pipes[0].x + PIPE_W < -20) pipes.shift();
 
-    // Add a new vine pair once the last one is far enough in.
-    const last = pipes[pipes.length - 1];
-    if (!last || last.x < W - PIPE_SPACING) spawnPipe(W);
+    if (onGround) legPhase += dt * (speed / 40);
 
-    // Ceiling and ground are both fatal.
-    if (birdY - BIRD_R <= 0) return endGame();
-    if (birdY + BIRD_R >= FLOOR) return endGame();
+    // Scroll obstacles
+    for (const o of obstacles) {
+      o.x -= speed * dt;
+      if (o.kind === "bird") {
+        // Gentle wing bob
+        o.bob = (o.bob || 0) + dt * 8;
+      }
+    }
+    while (obstacles.length && obstacles[0].x + obstacles[0].w < -40) {
+      obstacles.shift();
+    }
 
-    // Vine collision (circle vs the two rectangles of each pair).
-    for (const p of pipes) {
-      const gapTop = p.gapY - PIPE_GAP / 2;
-      const gapBottom = p.gapY + PIPE_GAP / 2;
-      if (
-        circleHitsRect(BIRD_X, birdY, BIRD_R, p.x, 0, PIPE_W, gapTop) ||
-        circleHitsRect(BIRD_X, birdY, BIRD_R, p.x, gapBottom, PIPE_W, FLOOR - gapBottom)
-      ) {
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) {
+      spawnObstacle();
+      const gap = SPAWN_MIN + Math.random() * (SPAWN_MAX - SPAWN_MIN);
+      // Slightly faster spawns as speed rises
+      spawnTimer = gap * (BASE_SPEED / speed);
+    }
+
+    // Collision
+    const hit = dinoHitbox();
+    for (const o of obstacles) {
+      let oy = o.y;
+      if (o.kind === "bird") oy = o.y + Math.sin(o.bob || 0) * 4;
+      if (rectsOverlap(hit.x, hit.y, hit.w, hit.h, o.x + 4, oy + 2, o.w - 8, o.h - 4)) {
         return endGame();
       }
     }
   }
 
-  // Closest-point circle/rectangle overlap test.
-  function circleHitsRect(cx, cy, r, rx, ry, rw, rh) {
-    const nx = Math.max(rx, Math.min(cx, rx + rw));
-    const ny = Math.max(ry, Math.min(cy, ry + rh));
-    const dx = cx - nx;
-    const dy = cy - ny;
-    return dx * dx + dy * dy < r * r;
+  function rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
+    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 
   function endGame() {
@@ -225,18 +267,16 @@
     if (score > best) {
       best = score;
       bestEl.textContent = best;
-      localStorage.setItem("flappyBest", String(best));
+      localStorage.setItem("dinoBest", String(best));
     }
 
-    overlayTitle.textContent = "Game Over 🦜";
+    overlayTitle.textContent = "Game Over 🦕";
     overlayText.textContent =
-      "Your parrot clipped a vine! Want to take another flight?";
+      "Ouch! The dino tripped. Want to run again?";
     overlayScore.hidden = false;
-    overlayScore.textContent =
-      `You flew past ${score} vine${score === 1 ? "" : "s"}!`;
+    overlayScore.textContent = `You ran ${score} point${score === 1 ? "" : "s"}!`;
     startBtn.textContent = "Play Again";
 
-    // Get ready to submit this run to the global leaderboard.
     scoreSubmitted = false;
     submitStatus.hidden = true;
     submitStatus.className = "submit-status";
@@ -251,218 +291,223 @@
 
   // ---- Drawing ------------------------------------------------------------
   function drawBackground() {
-    // Sky gradient.
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#8fd0ff");
-    g.addColorStop(1, "#d8f1ff");
+    g.addColorStop(0, "#c8e8ff");
+    g.addColorStop(0.55, "#f4efe2");
+    g.addColorStop(1, "#e8d9b0");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // A warm sun in the corner.
-    ctx.fillStyle = "rgba(255, 236, 150, 0.9)";
-    ctx.beginPath();
-    ctx.arc(W - 64, 70, 38, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Drifting clouds (slow parallax based on the clock).
-    drawClouds();
-  }
-
-  function drawClouds() {
-    const t = performance.now() / 60;
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    const clouds = [
-      { x: 80, y: 110, s: 1.0 },
-      { x: 260, y: 180, s: 1.3 },
-      { x: 150, y: 300, s: 0.85 },
-    ];
-    for (const c of clouds) {
-      // Wrap horizontally so clouds loop forever.
-      let x = (c.x - t * 0.6 * c.s) % (W + 120);
-      if (x < -120) x += W + 120;
-      cloud(x, c.y, 26 * c.s);
+    // Soft hills in the distance (parallax)
+    const t = distance * 0.15;
+    ctx.fillStyle = "rgba(180, 160, 120, 0.35)";
+    for (let i = 0; i < 4; i++) {
+      const hx = ((i * 280 - t) % (W + 280)) - 80;
+      ctx.beginPath();
+      ctx.ellipse(hx, FLOOR - 10, 120, 40, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
-  }
 
-  function cloud(x, y, r) {
+    // Sun
+    ctx.fillStyle = "rgba(255, 220, 120, 0.85)";
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.arc(x + r, y + 6, r * 0.8, 0, Math.PI * 2);
-    ctx.arc(x - r, y + 8, r * 0.7, 0, Math.PI * 2);
-    ctx.arc(x + r * 0.4, y - r * 0.5, r * 0.7, 0, Math.PI * 2);
+    ctx.arc(W - 70, 50, 28, 0, Math.PI * 2);
     ctx.fill();
-  }
-
-  function drawPipes() {
-    for (const p of pipes) {
-      const gapTop = p.gapY - PIPE_GAP / 2;
-      const gapBottom = p.gapY + PIPE_GAP / 2;
-      drawVine(p.x, 0, PIPE_W, gapTop, false);
-      drawVine(p.x, gapBottom, PIPE_W, FLOOR - gapBottom, true);
-    }
-  }
-
-  // A leafy green "vine" column. `capAtTop` puts the leafy mouth at the gap.
-  function drawVine(x, y, w, h, capAtTop) {
-    if (h <= 0) return;
-    const g = ctx.createLinearGradient(x, 0, x + w, 0);
-    g.addColorStop(0, "#4a9e36");
-    g.addColorStop(0.5, "#74c94f");
-    g.addColorStop(1, "#3c8a2c");
-    ctx.fillStyle = g;
-    roundRect(x, y, w, h, 8);
-    ctx.fill();
-
-    // Darker outline for a little depth.
-    ctx.strokeStyle = "#2f6b22";
-    ctx.lineWidth = 3;
-    roundRect(x, y, w, h, 8);
-    ctx.stroke();
-
-    // The leafy "cap" ring at the end nearest the gap.
-    const capY = capAtTop ? y : y + h - 18;
-    ctx.fillStyle = "#3f8f2e";
-    roundRect(x - 5, capY, w + 10, 18, 6);
-    ctx.fill();
-    ctx.strokeStyle = "#2f6b22";
-    ctx.lineWidth = 2;
-    roundRect(x - 5, capY, w + 10, 18, 6);
-    ctx.stroke();
-
-    // A couple of little leaves poking out for the jungle look.
-    ctx.fillStyle = "#8ed95f";
-    const ly = capAtTop ? y + 22 : capY - 10;
-    leaf(x + w * 0.18, ly, 7, -0.6);
-    leaf(x + w * 0.82, ly, 7, 0.6);
-  }
-
-  function leaf(cx, cy, r, rot) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(rot);
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r, r * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
   }
 
   function drawGround() {
-    // Grass strip.
-    const g = ctx.createLinearGradient(0, FLOOR, 0, H);
-    g.addColorStop(0, "#7cc35a");
-    g.addColorStop(1, "#5fa83e");
-    ctx.fillStyle = g;
+    ctx.fillStyle = "#c4a35a";
     ctx.fillRect(0, FLOOR, W, GROUND_H);
+    ctx.fillStyle = "#8a7040";
+    ctx.fillRect(0, FLOOR, W, 4);
 
-    // A darker soil line at the top of the ground.
-    ctx.fillStyle = "#4a7d2f";
-    ctx.fillRect(0, FLOOR, W, 6);
-
-    // Simple moving grass tufts so the ground feels like it scrolls.
-    const t = (performance.now() / 1000) * PIPE_SPEED;
-    ctx.strokeStyle = "rgba(40, 90, 30, 0.5)";
+    // Moving ground dashes
+    ctx.strokeStyle = "rgba(90, 70, 40, 0.45)";
     ctx.lineWidth = 2;
-    for (let i = 0; i < 14; i++) {
-      let gx = (i * 32 - (running ? t : 0)) % (W + 32);
-      if (gx < -32) gx += W + 32;
+    const offset = (distance * 0.5) % 40;
+    for (let x = -offset; x < W; x += 40) {
       ctx.beginPath();
-      ctx.moveTo(gx, FLOOR + 16);
-      ctx.lineTo(gx + 4, FLOOR + 8);
-      ctx.lineTo(gx + 8, FLOOR + 16);
+      ctx.moveTo(x, FLOOR + 14);
+      ctx.lineTo(x + 18, FLOOR + 14);
       ctx.stroke();
     }
   }
 
-  function drawBird() {
-    // A gentle bob while waiting on the start/idle screen.
-    const idle = !running && !gameOver ? Math.sin(performance.now() / 300) * 6 : 0;
-    const y = birdY + idle;
+  function drawDino() {
+    const h = ducking && onGround ? DINO_DUCK_H : DINO_H;
+    const y = ducking && onGround ? FLOOR - h : dinoY;
+    const idle = !running && !gameOver ? Math.sin(performance.now() / 350) * 3 : 0;
 
     ctx.save();
-    ctx.translate(BIRD_X, y);
-    ctx.rotate(birdAngle);
+    ctx.translate(DINO_X, y + idle);
 
-    // Shadow.
-    ctx.fillStyle = "rgba(0,0,0,0.12)";
-    ctx.beginPath();
-    ctx.ellipse(0, BIRD_R + 6, BIRD_R, BIRD_R * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Tail feathers.
-    ctx.fillStyle = "#e23b5a";
-    ctx.beginPath();
-    ctx.moveTo(-BIRD_R * 0.8, 0);
-    ctx.lineTo(-BIRD_R * 1.7, -BIRD_R * 0.5);
-    ctx.lineTo(-BIRD_R * 1.6, BIRD_R * 0.5);
-    ctx.closePath();
-    ctx.fill();
-
-    // Body (green parrot with a glossy gradient).
-    const bg = ctx.createLinearGradient(0, -BIRD_R, 0, BIRD_R);
-    bg.addColorStop(0, "#6ee06a");
-    bg.addColorStop(1, "#2faa46");
-    ctx.fillStyle = bg;
-    ctx.strokeStyle = "#1f7a32";
+    // Body
+    ctx.fillStyle = "#5a9e5e";
+    ctx.strokeStyle = "#3d7340";
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, BIRD_R * 1.1, BIRD_R, 0, 0, Math.PI * 2);
+    roundRect(0, 0, DINO_W, h, 6);
     ctx.fill();
     ctx.stroke();
 
-    // Wing — flaps with the rising/falling motion.
-    const wingUp = birdV < 0;
-    ctx.fillStyle = "#2faa46";
-    ctx.beginPath();
-    if (wingUp) {
-      ctx.ellipse(-2, -2, BIRD_R * 0.6, BIRD_R * 0.42, -0.6, 0, Math.PI * 2);
+    // Belly
+    ctx.fillStyle = "#8fd18a";
+    roundRect(8, h * 0.45, DINO_W - 16, h * 0.4, 4);
+    ctx.fill();
+
+    // Head bump / snout
+    if (!(ducking && onGround)) {
+      ctx.fillStyle = "#5a9e5e";
+      ctx.beginPath();
+      ctx.ellipse(DINO_W - 4, 10, 14, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Eye
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(DINO_W + 2, 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1a1a1a";
+      ctx.beginPath();
+      ctx.arc(DINO_W + 3, 6, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Smile
+      ctx.strokeStyle = "#3d7340";
+      ctx.beginPath();
+      ctx.arc(DINO_W + 4, 12, 5, 0.1, Math.PI - 0.1);
+      ctx.stroke();
     } else {
-      ctx.ellipse(-2, 4, BIRD_R * 0.6, BIRD_R * 0.42, 0.5, 0, Math.PI * 2);
+      // Ducking: eye on the side
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(DINO_W - 10, 8, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1a1a1a";
+      ctx.beginPath();
+      ctx.arc(DINO_W - 9, 8, 2, 0, Math.PI * 2);
+      ctx.fill();
     }
+
+    // Legs (running)
+    if (onGround && running && !gameOver) {
+      const swing = Math.sin(legPhase) * 8;
+      ctx.strokeStyle = "#3d7340";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(14, h - 2);
+      ctx.lineTo(14 + swing, h + 10);
+      ctx.moveTo(30, h - 2);
+      ctx.lineTo(30 - swing, h + 10);
+      ctx.stroke();
+    } else if (!onGround) {
+      ctx.strokeStyle = "#3d7340";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(14, h - 2);
+      ctx.lineTo(8, h + 8);
+      ctx.moveTo(30, h - 2);
+      ctx.lineTo(36, h + 8);
+      ctx.stroke();
+    }
+
+    // Tiny arm
+    if (!(ducking && onGround)) {
+      ctx.strokeStyle = "#3d7340";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(18, 22);
+      ctx.lineTo(8, 28);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawObstacles() {
+    for (const o of obstacles) {
+      if (o.kind === "cactus") drawCactus(o);
+      else if (o.kind === "rock") drawRock(o);
+      else drawBird(o);
+    }
+  }
+
+  function drawCactus(o) {
+    const g = ctx.createLinearGradient(o.x, 0, o.x + o.w, 0);
+    g.addColorStop(0, "#3d9e4a");
+    g.addColorStop(0.5, "#5ecf6a");
+    g.addColorStop(1, "#2f7a38");
+    ctx.fillStyle = g;
+    roundRect(o.x, o.y, o.w, o.h, 4);
+    ctx.fill();
+    // Arms
+    ctx.fillRect(o.x - 10, o.y + o.h * 0.35, 12, 8);
+    ctx.fillRect(o.x - 10, o.y + o.h * 0.25, 8, o.h * 0.25);
+    ctx.fillRect(o.x + o.w - 2, o.y + o.h * 0.45, 12, 8);
+    ctx.fillRect(o.x + o.w + 2, o.y + o.h * 0.35, 8, o.h * 0.2);
+  }
+
+  function drawRock(o) {
+    ctx.fillStyle = "#8a7a68";
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.y + o.h);
+    ctx.lineTo(o.x + o.w * 0.2, o.y);
+    ctx.lineTo(o.x + o.w * 0.7, o.y + 4);
+    ctx.lineTo(o.x + o.w, o.y + o.h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#a89880";
+    ctx.beginPath();
+    ctx.ellipse(o.x + o.w * 0.4, o.y + o.h * 0.5, 6, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawBird(o) {
+    const bob = Math.sin(o.bob || 0) * 4;
+    const y = o.y + bob;
+    ctx.save();
+    ctx.translate(o.x + o.w / 2, y + o.h / 2);
+
+    // Wings flap
+    const flap = Math.sin((o.bob || 0) * 2) * 0.5;
+    ctx.fillStyle = "#5a6a8a";
+    ctx.beginPath();
+    ctx.ellipse(-6, flap * 6, 14, 5, -0.4 + flap, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(6, -flap * 6, 14, 5, 0.4 - flap, 0, Math.PI * 2);
     ctx.fill();
 
-    // Cheek patch.
-    ctx.fillStyle = "#ffd23f";
+    // Body
+    ctx.fillStyle = "#6a7a9a";
     ctx.beginPath();
-    ctx.arc(BIRD_R * 0.45, BIRD_R * 0.2, BIRD_R * 0.28, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Beak.
-    ctx.fillStyle = "#ff9a3c";
+    // Beak
+    ctx.fillStyle = "#e8a040";
     ctx.beginPath();
-    ctx.moveTo(BIRD_R * 0.95, -BIRD_R * 0.1);
-    ctx.lineTo(BIRD_R * 1.7, BIRD_R * 0.1);
-    ctx.lineTo(BIRD_R * 0.95, BIRD_R * 0.35);
+    ctx.moveTo(10, -2);
+    ctx.lineTo(18, 0);
+    ctx.lineTo(10, 2);
     ctx.closePath();
     ctx.fill();
 
-    // Eye.
+    // Eye
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(BIRD_R * 0.5, -BIRD_R * 0.35, BIRD_R * 0.3, 0, Math.PI * 2);
+    ctx.arc(4, -3, 2.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#1a1a1a";
+    ctx.fillStyle = "#111";
     ctx.beginPath();
-    ctx.arc(BIRD_R * 0.58, -BIRD_R * 0.35, BIRD_R * 0.15, 0, Math.PI * 2);
+    ctx.arc(4.5, -3, 1.2, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
   }
 
-  function drawScore() {
-    if (!running || gameOver) return;
-    ctx.save();
-    ctx.font = "bold 48px -apple-system, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.fillStyle = "#fff";
-    ctx.strokeText(String(score), W / 2, 70);
-    ctx.fillText(String(score), W / 2, 70);
-    ctx.restore();
-  }
-
-  // ---- Canvas path util ---------------------------------------------------
   function roundRect(x, y, w, h, r) {
     const rr = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -476,8 +521,6 @@
 
   // ---- Main loop ----------------------------------------------------------
   function frame(now) {
-    // Seconds since the last frame, clamped so a background tab can't teleport
-    // the parrot through a vine when it returns.
     let dt = (now - lastTime) / 1000;
     lastTime = now;
     if (dt > 0.05) dt = 0.05;
@@ -485,10 +528,9 @@
     if (running && !gameOver) update(dt);
 
     drawBackground();
-    drawPipes();
     drawGround();
-    drawBird();
-    drawScore();
+    drawObstacles();
+    drawDino();
 
     requestAnimationFrame(frame);
   }
@@ -503,24 +545,19 @@
       .replace(/>/g, "&gt;");
   }
 
-  // Fold a name to the same identity key the server uses (trim + lowercase).
   function normalizeName(name) {
     return String(name || "").trim().toLowerCase();
   }
 
-  // Highlight the row matching the score we just submitted.
-  let highlight = null;     // { name, score } or null
-  let currentScores = [];   // latest collapsed board (best per name), best-first
+  let highlight = null;
+  let currentScores = [];
 
-  // Positive if `a` ranks AHEAD of `b`: HIGHER score wins; tie → earlier ts.
   function rankCompare(a, b) {
     const ds = (Number(a.score) || 0) - (Number(b.score) || 0);
     if (ds !== 0) return ds;
     return (Number(b.ts) || 0) - (Number(a.ts) || 0);
   }
 
-  // Collapse an append-only board to ONE entry per normalized name, keeping
-  // each player's BEST (highest) score. Result is sorted best-first.
   function collapseScores(scores) {
     const bestByName = new Map();
     scores.forEach((s) => {
@@ -545,7 +582,7 @@
     currentScores = collapsed;
     lbList.innerHTML = "";
     if (!collapsed.length) {
-      lbNote.textContent = "No scores yet — be the first! 🦜";
+      lbNote.textContent = "No scores yet — be the first! 🦕";
       lbNote.hidden = false;
       return;
     }
@@ -566,7 +603,7 @@
 
   async function fetchLeaderboard() {
     try {
-      const res = await fetch("/api/flappy/leaderboard", { cache: "no-store" });
+      const res = await fetch("/api/dino/leaderboard", { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       renderLeaderboard(Array.isArray(data.scores) ? data.scores : []);
@@ -586,7 +623,6 @@
     return currentScores.find((s) => normalizeName(s.name) === norm) || null;
   }
 
-  // "Better" = HIGHER score. A tie does NOT beat your old score.
   function runIsHigher(run, prev) {
     return (Number(run.score) || 0) > (Number(prev.score) || 0);
   }
@@ -701,7 +737,7 @@
 
     const payload = { name, score, replace };
     try {
-      const res = await fetch("/api/flappy/score", {
+      const res = await fetch("/api/dino/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -759,7 +795,7 @@
   });
 
   // ===================================================================
-  // Global visit counter (independent from Snake / Chess)
+  // Global visit counter (up to 3 counts per device)
   // ===================================================================
   function showVisits(n) {
     if (typeof n !== "number" || !isFinite(n)) {
@@ -770,11 +806,11 @@
   }
 
   async function initVisits() {
-    await FunDevice.visitOnce("flappy", "/api/flappy/visit", "/api/flappy/visits", showVisits);
+    await FunDevice.visitOnce("dino", "/api/dino/visit", "/api/dino/visits", showVisits, null, 3);
   }
 
   async function refreshVisits() {
-    await FunDevice.visitOnce("flappy", "/api/flappy/visit", "/api/flappy/visits", showVisits);
+    await FunDevice.visitOnce("dino", "/api/dino/visit", "/api/dino/visits", showVisits, null, 3);
   }
 
   // ---- Boot ---------------------------------------------------------------

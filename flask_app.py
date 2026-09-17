@@ -42,6 +42,7 @@ from flask import Flask, jsonify, request, send_from_directory
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(PROJECT_DIR, "leaderboard.json")
 VISITS_FILE = os.path.join(PROJECT_DIR, "visits.json")
+ANNOUNCE_FILE = os.path.join(PROJECT_DIR, "announce.json")
 
 # Chess gets its OWN storage files, independent from Snake's.
 CHESS_DATA_FILE = os.path.join(PROJECT_DIR, "chess_leaderboard.json")
@@ -94,6 +95,9 @@ _lock = threading.Lock()
 
 # A separate lock guards the global visit counter file.
 _visits_lock = threading.Lock()
+
+# Admin broadcast message shown on every game page.
+_announce_lock = threading.Lock()
 
 # Chess has its own locks so it never contends with the Snake endpoints.
 _chess_lock = threading.Lock()
@@ -480,6 +484,52 @@ def static_files(filename):
     but to be tidy we don't expose the raw data/code files to direct download.
     """
     return send_from_directory(PROJECT_DIR, filename)
+
+
+# ---- Admin announce (site-wide banner) ------------------------------------
+def _load_announce():
+    """Read announce.json. Missing/bad file -> empty message.
+
+    If `until` (unix ms) is set and already past, treat the announce as expired
+    and return an empty message so clients clear the banner / abuse mode.
+    """
+    if not os.path.exists(ANNOUNCE_FILE):
+        return {"message": "", "id": 0, "until": 0, "purgeF35": False}
+    try:
+        with open(ANNOUNCE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {"message": "", "id": 0, "until": 0, "purgeF35": False}
+        msg = data.get("message", "")
+        if not isinstance(msg, str):
+            msg = str(msg) if msg is not None else ""
+        # Keep message short and strip markup-ish chars.
+        msg = _HTML_CHARS.sub("", msg.strip())[:200]
+        try:
+            aid = int(data.get("id", 0))
+        except (TypeError, ValueError):
+            aid = 0
+        try:
+            until = int(data.get("until", 0) or 0)
+        except (TypeError, ValueError):
+            until = 0
+        # Expired timed announce -> clear message (keep id/until for clients).
+        if until and int(time.time() * 1000) > until:
+            msg = ""
+        # Optional one-shot signal for Mini War to delete F-35s without refresh.
+        purge_f35 = bool(data.get("purgeF35"))
+        return {"message": msg, "id": aid, "until": until, "purgeF35": purge_f35}
+    except (ValueError, OSError):
+        return {"message": "", "id": 0, "until": 0, "purgeF35": False}
+
+
+@app.route("/api/announce", methods=["GET", "OPTIONS"])
+def api_announce():
+    """Return the current admin message for every game page to poll."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _announce_lock:
+        return jsonify(_load_announce())
 
 
 # ---- API: leaderboard -----------------------------------------------------
@@ -1495,6 +1545,294 @@ def api_2048_score():
     return jsonify({"scores": board})
 
 
+# ===========================================================================
+# Dino Run — classic runner. Leaderboard is HIGHEST score first
+# (score = distance survived).
+# ===========================================================================
+DINO_DATA_FILE = os.path.join(PROJECT_DIR, "dino_leaderboard.json")
+DINO_VISITS_FILE = os.path.join(PROJECT_DIR, "dino_visits.json")
+
+# Distance score; generous cap so junk can't store nonsense.
+MAX_DINO_SCORE = 100000000
+
+_dino_lock = threading.Lock()
+_dino_visits_lock = threading.Lock()
+
+
+def _load_dino_scores():
+    """Read the dino score list from disk. [] if missing/unreadable."""
+    if not os.path.exists(DINO_DATA_FILE):
+        return []
+    try:
+        with open(DINO_DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        scores = data.get("scores", []) if isinstance(data, dict) else []
+        return scores if isinstance(scores, list) else []
+    except (ValueError, OSError):
+        return []
+
+
+def _save_dino_scores(scores):
+    """Write dino scores atomically-ish (write temp, then replace)."""
+    tmp = DINO_DATA_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"scores": scores}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, DINO_DATA_FILE)
+
+
+def _dino_rank_key(entry):
+    """Best first: HIGHEST score wins; tie → earliest submission."""
+    return (-int(entry.get("score", 0) or 0), int(entry.get("ts", 0) or 0))
+
+
+def _dino_top(scores, n=TOP_N):
+    return sorted(scores, key=_dino_rank_key)[:n]
+
+
+def _load_dino_visits():
+    """Read the dino visit count. 0 if missing/unreadable."""
+    if not os.path.exists(DINO_VISITS_FILE):
+        return 0
+    try:
+        with open(DINO_VISITS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        visits = data.get("visits", 0) if isinstance(data, dict) else 0
+        visits = int(visits)
+        return visits if visits >= 0 else 0
+    except (ValueError, TypeError, OSError):
+        return 0
+
+
+def _save_dino_visits(visits):
+    """Write the dino visit count atomically-ish."""
+    tmp = DINO_VISITS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"visits": int(visits)}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, DINO_VISITS_FILE)
+
+
+@app.route("/api/dino/leaderboard", methods=["GET", "OPTIONS"])
+def api_dino_leaderboard():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _dino_lock:
+        board = _dino_top(_load_dino_scores())
+    return jsonify({"scores": board})
+
+
+@app.route("/api/dino/visit", methods=["POST", "OPTIONS"])
+def api_dino_visit():
+    """Increment the dino visit counter by exactly one."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _dino_visits_lock:
+        visits = _load_dino_visits() + 1
+        _save_dino_visits(visits)
+    return jsonify({"visits": visits})
+
+
+@app.route("/api/dino/visits", methods=["GET", "OPTIONS"])
+def api_dino_visits():
+    """Return the dino visit count WITHOUT incrementing."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _dino_visits_lock:
+        visits = _load_dino_visits()
+    return jsonify({"visits": visits})
+
+
+@app.route("/api/dino/score", methods=["POST", "OPTIONS"])
+def api_dino_score():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    raw = request.get_data(cache=False) or b""
+    if len(raw) <= 0 or len(raw) > 10000:
+        return jsonify({"error": "bad request"}), 400
+
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("body must be a JSON object")
+        name = _clean_name(payload.get("name"))
+        score = _clean_int(payload.get("score"), MAX_DINO_SCORE)
+        replace = payload.get("replace") is True
+    except (ValueError, UnicodeDecodeError, TypeError):
+        return jsonify({"error": "invalid score payload"}), 400
+
+    entry = {
+        "name": name,
+        "score": score,
+        "ts": int(time.time() * 1000),
+    }
+
+    with _dino_lock:
+        scores = _load_dino_scores()
+        norm = _normalize_name(name)
+        if replace:
+            scores = [e for e in scores if _normalize_name(e.get("name")) != norm]
+        elif any(_normalize_name(e.get("name")) == norm for e in scores):
+            return (
+                jsonify(
+                    {
+                        "error": "name_taken",
+                        "message": "That name is already taken — choose a different one.",
+                    }
+                ),
+                409,
+            )
+        scores.append(entry)
+        scores = _dino_top(scores, MAX_STORED)
+        _save_dino_scores(scores)
+        board = scores[:TOP_N]
+
+    return jsonify({"scores": board})
+
+
+# ===========================================================================
+# Platform Jumper — Doodle Jump style climber. Leaderboard is HIGHEST score
+# first (score = height climbed).
+# ===========================================================================
+PLATFORM_DATA_FILE = os.path.join(PROJECT_DIR, "platform_leaderboard.json")
+PLATFORM_VISITS_FILE = os.path.join(PROJECT_DIR, "platform_visits.json")
+
+# Height score; generous cap so junk can't store nonsense.
+MAX_PLATFORM_SCORE = 100000000
+
+_platform_lock = threading.Lock()
+_platform_visits_lock = threading.Lock()
+
+
+def _load_platform_scores():
+    """Read the platform score list from disk. [] if missing/unreadable."""
+    if not os.path.exists(PLATFORM_DATA_FILE):
+        return []
+    try:
+        with open(PLATFORM_DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        scores = data.get("scores", []) if isinstance(data, dict) else []
+        return scores if isinstance(scores, list) else []
+    except (ValueError, OSError):
+        return []
+
+
+def _save_platform_scores(scores):
+    """Write platform scores atomically-ish (write temp, then replace)."""
+    tmp = PLATFORM_DATA_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"scores": scores}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, PLATFORM_DATA_FILE)
+
+
+def _platform_rank_key(entry):
+    """Best first: HIGHEST score wins; tie → earliest submission."""
+    return (-int(entry.get("score", 0) or 0), int(entry.get("ts", 0) or 0))
+
+
+def _platform_top(scores, n=TOP_N):
+    return sorted(scores, key=_platform_rank_key)[:n]
+
+
+def _load_platform_visits():
+    """Read the platform visit count. 0 if missing/unreadable."""
+    if not os.path.exists(PLATFORM_VISITS_FILE):
+        return 0
+    try:
+        with open(PLATFORM_VISITS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        visits = data.get("visits", 0) if isinstance(data, dict) else 0
+        visits = int(visits)
+        return visits if visits >= 0 else 0
+    except (ValueError, TypeError, OSError):
+        return 0
+
+
+def _save_platform_visits(visits):
+    """Write the platform visit count atomically-ish."""
+    tmp = PLATFORM_VISITS_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"visits": int(visits)}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, PLATFORM_VISITS_FILE)
+
+
+@app.route("/api/platform/leaderboard", methods=["GET", "OPTIONS"])
+def api_platform_leaderboard():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _platform_lock:
+        board = _platform_top(_load_platform_scores())
+    return jsonify({"scores": board})
+
+
+@app.route("/api/platform/visit", methods=["POST", "OPTIONS"])
+def api_platform_visit():
+    """Increment the platform visit counter by exactly one."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _platform_visits_lock:
+        visits = _load_platform_visits() + 1
+        _save_platform_visits(visits)
+    return jsonify({"visits": visits})
+
+
+@app.route("/api/platform/visits", methods=["GET", "OPTIONS"])
+def api_platform_visits():
+    """Return the platform visit count WITHOUT incrementing."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    with _platform_visits_lock:
+        visits = _load_platform_visits()
+    return jsonify({"visits": visits})
+
+
+@app.route("/api/platform/score", methods=["POST", "OPTIONS"])
+def api_platform_score():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    raw = request.get_data(cache=False) or b""
+    if len(raw) <= 0 or len(raw) > 10000:
+        return jsonify({"error": "bad request"}), 400
+
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("body must be a JSON object")
+        name = _clean_name(payload.get("name"))
+        score = _clean_int(payload.get("score"), MAX_PLATFORM_SCORE)
+        replace = payload.get("replace") is True
+    except (ValueError, UnicodeDecodeError, TypeError):
+        return jsonify({"error": "invalid score payload"}), 400
+
+    entry = {
+        "name": name,
+        "score": score,
+        "ts": int(time.time() * 1000),
+    }
+
+    with _platform_lock:
+        scores = _load_platform_scores()
+        norm = _normalize_name(name)
+        if replace:
+            scores = [e for e in scores if _normalize_name(e.get("name")) != norm]
+        elif any(_normalize_name(e.get("name")) == norm for e in scores):
+            return (
+                jsonify(
+                    {
+                        "error": "name_taken",
+                        "message": "That name is already taken — choose a different one.",
+                    }
+                ),
+                409,
+            )
+        scores.append(entry)
+        scores = _platform_top(scores, MAX_STORED)
+        _save_platform_scores(scores)
+        board = scores[:TOP_N]
+
+    return jsonify({"scores": board})
+
+
 # Make sure the storage file exists so the first GET returns a real list.
 if not os.path.exists(DATA_FILE):
     try:
@@ -1591,6 +1929,32 @@ if not os.path.exists(GAME2048_DATA_FILE):
 if not os.path.exists(GAME2048_VISITS_FILE):
     try:
         _save_2048_visits(0)
+    except OSError:
+        pass
+
+# Dino Run storage files, created the same way so the first GETs work.
+if not os.path.exists(DINO_DATA_FILE):
+    try:
+        _save_dino_scores([])
+    except OSError:
+        pass
+
+if not os.path.exists(DINO_VISITS_FILE):
+    try:
+        _save_dino_visits(0)
+    except OSError:
+        pass
+
+# Platform Jumper storage files, created the same way so the first GETs work.
+if not os.path.exists(PLATFORM_DATA_FILE):
+    try:
+        _save_platform_scores([])
+    except OSError:
+        pass
+
+if not os.path.exists(PLATFORM_VISITS_FILE):
+    try:
+        _save_platform_visits(0)
     except OSError:
         pass
 

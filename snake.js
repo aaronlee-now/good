@@ -251,7 +251,7 @@
     submitStatus.className = "submit-status";
     submitBtn.disabled = false;
     submitBtn.textContent = "Submit 🍎 score";
-    nameInput.value = localStorage.getItem("zooSnakeName") || "";
+    prepareNameInput();
     submitRow.hidden = false;
     replaceConfirm.hidden = true;  // start fresh; only shown if a returning player re-submits
 
@@ -940,12 +940,39 @@
     replaceYes.focus();
   }
 
+  // One shared player name for this device across all Fun Games (see device.js).
+  function getSavedPlayerName() {
+    return FunDevice.getName();
+  }
+
+  // Fill the name box. If this device already picked a name, lock the box so
+  // they can only update THAT score (not invent a second person).
+  function prepareNameInput() {
+    if (FunDevice.isLocked()) {
+      nameInput.value = FunDevice.getName();
+      nameInput.readOnly = true;
+    }
+  }
+
   // Validate the entered name, then decide: new entry, your-account replace, or
   // blocked (someone else's name).
   async function handleSubmitClick() {
     if (scoreSubmitted) return;
 
-    const name = (nameInput.value || "").trim().slice(0, 16);
+    let name = (nameInput.value || "").trim().slice(0, 16);
+    if (FunDevice.isLocked()) {
+      const locked = FunDevice.getName();
+      if (normalizeName(name) !== normalizeName(locked)) {
+        nameInput.value = locked;
+        submitStatus.textContent = "This device is locked to \"" + locked + "\".";
+        submitStatus.className = "submit-status taken";
+        submitStatus.hidden = false;
+        return;
+      }
+      name = locked;
+    }
+    nameInput.value = name;
+
     if (!name) {
       submitStatus.textContent = "Please enter a name first.";
       submitStatus.className = "submit-status err";
@@ -961,25 +988,21 @@
     submitStatus.hidden = true;
     await fetchLeaderboard();
 
-    if (!nameIsTaken(name)) {
-      // Brand-new name → submit as a new entry and remember it as this device.
-      localStorage.setItem("zooSnakeName", name);
-      submitScore(name);
-      return;
-    }
-
-    // The name IS on the board. Is it THIS device's remembered account?
-    const ownName = normalizeName(localStorage.getItem("zooSnakeName"));
-    if (ownName && normalizeName(name) === ownName) {
-      // Their own account → offer to replace instead of blocking.
+    const locked = getSavedPlayerName();
+    if (locked && normalizeName(name) === normalizeName(locked)) {
+      // Returning device player — replace only (never invent a second person).
       const prevEntry = bestEntryForName(name);
       if (prevEntry) {
         showReplaceConfirm(name, prevEntry);
         return;
       }
-      // No matching entry found locally (shouldn't happen since nameIsTaken was
-      // true) — fall back to a plain new submission.
-      localStorage.setItem("zooSnakeName", name);
+      FunDevice.lockName(name);
+      submitScore(name, true);
+      return;
+    }
+
+    if (!nameIsTaken(name)) {
+      FunDevice.lockName(name);
       submitScore(name);
       return;
     }
@@ -1013,7 +1036,7 @@
       const data = await res.json();
       scoreSubmitted = true;
       // This device now owns this name going forward.
-      localStorage.setItem("zooSnakeName", name);
+      FunDevice.lockName(name);
       highlight = { name, apples: score, timeMs: lastSurvivalMs };
       renderLeaderboard(Array.isArray(data.scores) ? data.scores : []);
       submitStatus.textContent = replace
@@ -1042,7 +1065,7 @@
   // Replace confirmation: "Replace my score" submits with replace=true.
   replaceYes.addEventListener("click", () => {
     if (scoreSubmitted) return;
-    const name = (nameInput.value || "").trim().slice(0, 16);
+    const name = getSavedPlayerName() || (nameInput.value || "").trim().slice(0, 16);
     if (!name) return;
     submitScore(name, true);
   });
@@ -1070,42 +1093,27 @@
     visitsCountEl.textContent = Math.max(0, Math.floor(n)).toLocaleString("en-US");
   }
 
-  // Count EXACTLY ONCE PER DEVICE, then keep the displayed number fresh.
-  // Uses localStorage (persists across sessions/replays) so a device only ever
-  // adds a single visit — replaying or coming back later does NOT increment.
-  // A different device (or browser) with no flag counts as a new visit.
-  // A failed request just shows "—" and never touches the game or leaderboard.
+  // Count EXACTLY ONCE PER DEVICE (legacy zooSnakeCounted still honored).
   async function initVisits() {
-    const VISIT_KEY = "zooSnakeCounted";
-    const firstOnThisDevice = !localStorage.getItem(VISIT_KEY);
-    try {
-      const res = await fetch(firstOnThisDevice ? "/api/visit" : "/api/visits", {
-        method: firstOnThisDevice ? "POST" : "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      // Mark this device as counted only AFTER a successful increment, so a
-      // failed first call can retry as an increment on the next load.
-      if (firstOnThisDevice) localStorage.setItem(VISIT_KEY, "1");
-      showVisits(Number(data.visits));
-    } catch (err) {
-      // Endpoint missing/unreachable (e.g. old server) — graceful fallback.
-      showVisits(NaN);
-    }
+    await FunDevice.visitOnce(
+      "snake",
+      "/api/visit",
+      "/api/visits",
+      showVisits,
+      ["zooSnakeCounted"]
+    );
   }
 
   // Refresh just the displayed number (never increments) so the count stays
   // current as other people visit.
   async function refreshVisits() {
-    try {
-      const res = await fetch("/api/visits", { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      showVisits(Number(data.visits));
-    } catch (err) {
-      // Leave whatever is currently shown; don't clobber a good number.
-    }
+    await FunDevice.visitOnce(
+      "snake",
+      "/api/visit",
+      "/api/visits",
+      showVisits,
+      ["zooSnakeCounted"]
+    );
   }
 
   // ---- Save & resume helpers ----------------------------------------------

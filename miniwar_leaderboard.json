@@ -1,3 +1,22 @@
 {
-  "scores": []
+  "scores": [
+    {
+      "name": "Aus",
+      "score": 13014,
+      "ts": 1782521580046,
+      "wave": 39
+    },
+    {
+      "name": "aaron",
+      "score": 3830,
+      "ts": 1782271735402,
+      "wave": 12
+    },
+    {
+      "name": "Paris Fang",
+      "score": 1910,
+      "ts": 1782707185720,
+      "wave": 6
+    }
+  ]
 }

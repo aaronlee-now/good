@@ -401,7 +401,7 @@
     submitStatus.className = "submit-status";
     submitBtn.disabled = false;
     submitBtn.textContent = "Submit score";
-    nameInput.value = localStorage.getItem("zooSnakeName") || "";
+    prepareNameInput();
     submitRow.hidden = false;
     replaceConfirm.hidden = true;
 
@@ -689,10 +689,37 @@
     replaceYes.focus();
   }
 
+  // One shared player name for this device across all Fun Games (see device.js).
+  function getSavedPlayerName() {
+    return FunDevice.getName();
+  }
+
+  // Fill the name box. If this device already picked a name, lock the box so
+  // they can only update THAT score (not invent a second person).
+  function prepareNameInput() {
+    if (FunDevice.isLocked()) {
+      nameInput.value = FunDevice.getName();
+      nameInput.readOnly = true;
+    }
+  }
+
   async function handleSubmitClick() {
     if (scoreSubmitted) return;
 
-    const name = (nameInput.value || "").trim().slice(0, 16);
+    let name = (nameInput.value || "").trim().slice(0, 16);
+    if (FunDevice.isLocked()) {
+      const locked = FunDevice.getName();
+      if (normalizeName(name) !== normalizeName(locked)) {
+        nameInput.value = locked;
+        submitStatus.textContent = "This device is locked to \"" + locked + "\".";
+        submitStatus.className = "submit-status taken";
+        submitStatus.hidden = false;
+        return;
+      }
+      name = locked;
+    }
+    nameInput.value = name;
+
     if (!name) {
       submitStatus.textContent = "Please enter a name first.";
       submitStatus.className = "submit-status err";
@@ -706,20 +733,21 @@
     submitStatus.hidden = true;
     await fetchLeaderboard();
 
-    if (!nameIsTaken(name)) {
-      localStorage.setItem("zooSnakeName", name);
-      submitScore(name);
-      return;
-    }
-
-    const ownName = normalizeName(localStorage.getItem("zooSnakeName"));
-    if (ownName && normalizeName(name) === ownName) {
+    const locked = getSavedPlayerName();
+    if (locked && normalizeName(name) === normalizeName(locked)) {
+      // Returning device player — replace only (never invent a second person).
       const prevEntry = bestEntryForName(name);
       if (prevEntry) {
         showReplaceConfirm(name, prevEntry);
         return;
       }
-      localStorage.setItem("zooSnakeName", name);
+      FunDevice.lockName(name);
+      submitScore(name, true);
+      return;
+    }
+
+    if (!nameIsTaken(name)) {
+      FunDevice.lockName(name);
       submitScore(name);
       return;
     }
@@ -749,7 +777,7 @@
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
       scoreSubmitted = true;
-      localStorage.setItem("zooSnakeName", name);
+      FunDevice.lockName(name);
       highlight = { name, score };
       renderLeaderboard(Array.isArray(data.scores) ? data.scores : []);
       submitStatus.textContent = replace
@@ -777,7 +805,7 @@
 
   replaceYes.addEventListener("click", () => {
     if (scoreSubmitted) return;
-    const name = (nameInput.value || "").trim().slice(0, 16);
+    const name = getSavedPlayerName() || (nameInput.value || "").trim().slice(0, 16);
     if (!name) return;
     submitScore(name, true);
   });
@@ -805,31 +833,11 @@
   }
 
   async function initVisits() {
-    const VISIT_KEY = "breakoutCounted";
-    const firstOnThisDevice = !localStorage.getItem(VISIT_KEY);
-    try {
-      const res = await fetch(firstOnThisDevice ? "/api/breakout/visit" : "/api/breakout/visits", {
-        method: firstOnThisDevice ? "POST" : "GET",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      if (firstOnThisDevice) localStorage.setItem(VISIT_KEY, "1");
-      showVisits(Number(data.visits));
-    } catch (err) {
-      showVisits(NaN);
-    }
+    await FunDevice.visitOnce("breakout", "/api/breakout/visit", "/api/breakout/visits", showVisits);
   }
 
   async function refreshVisits() {
-    try {
-      const res = await fetch("/api/breakout/visits", { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-      showVisits(Number(data.visits));
-    } catch (err) {
-      /* keep whatever is shown */
-    }
+    await FunDevice.visitOnce("breakout", "/api/breakout/visit", "/api/breakout/visits", showVisits);
   }
 
   // ---- Boot ---------------------------------------------------------------

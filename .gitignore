@@ -1,6 +1,9 @@
 # Secrets / deploy credentials
 _deploy_chess.sh
 _deploy_chess.log
+_deploy_abuse.sh
+_deploy_identity.sh
+_patch_fun_device.py
 .env
 .env.*
 *.pem
@@ -8,3 +11,8 @@ credentials.json
 
 # Local deploy artifacts
 fungames_deploy.zip
+
+# Python cache junk
+.pycache/
+__pycache__/
+*.pyc

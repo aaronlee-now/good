@@ -1,3 +1,39 @@
 {
-  "scores": []
+  "scores": [
+    {
+      "name": "Iris",
+      "score": 5530,
+      "ts": 1782429806929
+    },
+    {
+      "name": "Paris",
+      "score": 2960,
+      "ts": 1782230040462
+    },
+    {
+      "name": "Angela",
+      "score": 2090,
+      "ts": 1782230253663
+    },
+    {
+      "name": "owner of site1",
+      "score": 1800,
+      "ts": 1785117705129
+    },
+    {
+      "name": "owner of site",
+      "score": 1030,
+      "ts": 1785009008893
+    },
+    {
+      "name": "Paris Fang",
+      "score": 1010,
+      "ts": 1782706925277
+    },
+    {
+      "name": "Aaron on watch",
+      "score": 660,
+      "ts": 1785304304680
+    }
+  ]
 }

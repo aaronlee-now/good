@@ -1,3 +1,40 @@
 {
-  "scores": []
+  "scores": [
+    {
+      "name": "owner of site1",
+      "revealed": 130,
+      "total": 381,
+      "time": 6,
+      "difficulty": "hard",
+      "won": false,
+      "ts": 1785009430501
+    },
+    {
+      "name": "Iris",
+      "revealed": 71,
+      "total": 71,
+      "time": 39,
+      "difficulty": "easy",
+      "won": true,
+      "ts": 1782588025321
+    },
+    {
+      "name": "Aus",
+      "revealed": 71,
+      "total": 71,
+      "time": 43,
+      "difficulty": "easy",
+      "won": true,
+      "ts": 1782521060342
+    },
+    {
+      "name": "owner of site",
+      "revealed": 67,
+      "total": 71,
+      "time": 6,
+      "difficulty": "easy",
+      "won": false,
+      "ts": 1782253796944
+    }
+  ]
 }
